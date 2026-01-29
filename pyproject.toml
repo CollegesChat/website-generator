@@ -1,0 +1,11 @@
+[project]
+name = "website-generator"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "niquests>=3.17.0",
+    "python-slugify>=8.0.4",
+    "zhconv>=1.4.3",
+]
