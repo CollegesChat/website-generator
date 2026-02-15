@@ -1,11 +1,11 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 import csv
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from random import sample
+from sys import argv
 from typing import cast
 
 import niquests
@@ -68,7 +68,6 @@ REQUIRED_DOCS = [
 
 BASE_URL = 'https://raw.githubusercontent.com/CollegesChat/university-information/refs/heads/master/questionnaires/'
 DOC_URL = BASE_URL + 'site/docs/choose-a-college/'
-
 
 
 # ================== 数据类 ==================
@@ -209,7 +208,11 @@ def process_universities(universities: dict, colleges: dict) -> None:
         with alias_path.open('r', encoding='utf-8') as f:
             for line in f:
                 name, *aliases = line.rstrip('\n').split('🚮')
-                primary = universities[name]
+                primary = universities.get(name)
+                if primary is None:
+                    # Debug mode may only load a subset; skip missing primary names.
+                    print(f'[warn] alias primary missing: {name}')
+                    continue
                 for alias in aliases:
                     if alias in universities:
                         primary.combine_from(universities[alias])
@@ -241,6 +244,7 @@ def ensure_dirs() -> None:
     (SITE_DIR / 'content' / 'docs' / 'choose-a-college').mkdir(
         parents=True, exist_ok=True
     )
+
 
 def sanitize_filename(filename: str) -> tuple[str, bool]:
     """清理文件名中的非法字符并判断是否被替换"""
@@ -275,7 +279,7 @@ def write_markdown_for_universities(
             '---\n',
             f'title: "{name}{" (已归档)" if archived else ""}"\n',
             f'slug: "{slug}"\n',
-            'draft: false\n',
+            f'description: 来自 colleges.chat 的{name} 问卷调查信息\n',
             '---\n\n',
         ]
         lines.append('> 本页面内容来源于问卷，仅供参考。\n\n')
@@ -293,42 +297,25 @@ def write_markdown_for_universities(
                 lines.append(markdown_escape(str(a)) + '\n\n')
         target.write_text(''.join(lines), encoding='utf-8')
 
-
-def write_required_indices() -> None:
-    """为 universities 和 archived/universities 写入 cascade 配置"""
-    archived_index = (
-        SITE_DIR / 'content' / 'docs' / 'archived' / 'universities' / '_index.md'
-    )
-    regular_index = SITE_DIR / 'content' / 'docs' / 'universities' / '_index.md'
-    archived_index.parent.mkdir(parents=True, exist_ok=True)
-    regular_index.parent.mkdir(parents=True, exist_ok=True)
-    archived_index.write_text(
-        '---\ntitle: 已归档数据\ncascade:\n  sidebar:\n    hidden: true\n---', encoding='utf-8'
-    )
-    regular_index.write_text(
-        '---\ntitle: 问卷数据\ncascade:\n  sidebar:\n    hidden: true\n---',
-        encoding='utf-8',
-    )
-
 ensure_dirs()
 download_files(REQUIRED_FILES, BASE_URL, ROOT)
 download_files(
     REQUIRED_DOCS, DOC_URL, SITE_DIR / 'content' / 'docs' / 'choose-a-college'
 )
-download_files(["index.md"],BASE_URL + '/site/docs/', SITE_DIR / 'content' / 'docs'
-)
+download_files(['index.md'], BASE_URL + '/site/docs/', SITE_DIR / 'content' / 'docs')
 
-(SITE_DIR / 'content' / 'docs' / 'choose-a-college' / '_index.md').write_text(
-    '---\ntitle: 择校相关\n---',
-    encoding='utf-8',
-)
+target_file = SITE_DIR / 'content' / 'docs' / 'index.md'
+new_file = target_file.with_name('_index.md')
+target_file.rename(new_file)
+header = '---\ntitle: 首页\nurl: /\n---\n\n'
+content = new_file.read_text(encoding='utf-8')
+new_file.write_text(header + content, encoding='utf-8')
+
 provinces, colleges = load_colleges()
 archive_cut = datetime.strptime(ARCHIVE_TIME, '%Y-%m-%d %H:%M:%S')
 
 universities: defaultdict[str, University] = defaultdict(University)
-universities_archived: defaultdict[str, University] = defaultdict(
-    University
-)
+universities_archived: defaultdict[str, University] = defaultdict(University)
 
 with (ROOT / 'results_desensitized.csv').open('r', encoding='utf-8') as f:
     reader = csv.reader(f)
@@ -338,6 +325,14 @@ with (ROOT / 'results_desensitized.csv').open('r', encoding='utf-8') as f:
         target = universities_archived if t < archive_cut else universities
         load_to_universities(target, row)
 
+if 'debug' in argv:
+    universities: dict[str, University] = dict(sample(list(universities.items()), 100))
+    universities_archived: dict[str, University] = dict(
+        sample(list(universities_archived.items()), 100)
+    )
+    print(
+        f'Debug mode: only processing 100 universities each <{len(universities)} and {len(universities_archived)} >.'
+    )
 process_universities(universities, colleges)
 process_universities(universities_archived, colleges)
 
@@ -347,4 +342,3 @@ write_markdown_for_universities(
     universities_archived, FilenameMap(), colleges, archived=True
 )
 
-write_required_indices()
