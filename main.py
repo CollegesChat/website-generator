@@ -1,6 +1,8 @@
 import csv
+import os
 import re
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -253,49 +255,96 @@ def sanitize_filename(filename: str) -> tuple[str, bool]:
     return cleaned, cleaned != filename
 
 
-def write_markdown_for_universities(
-    universities: dict,
-    filename_map: FilenameMap,
-    colleges: dict,
+def find_province(name: str, colleges: dict[str, str]) -> str:
+    for key, prov in colleges.items():
+        if name.find(key) >= 0:
+            return prov
+    return '其他'
+
+
+def render_university_markdown(
+    name: str, uni: University, slug: str, archived: bool
+) -> str:
+    lines: list[str] = [
+        '---\n',
+        f'title: "{name}{" (已归档)" if archived else ""}"\n',
+        f'slug: "{slug}"\n',
+        f'description: 来自 colleges.chat 的{name} 问卷调查信息\n',
+        '---\n\n',
+    ]
+    lines.append('> 本页面内容来源于问卷，仅供参考。\n\n')
+    lines.append('> 数据来源：\n<details><summary>展开</summary>\n<ul>\n')
+    for c in uni.credits:
+        lines.append(f'<li>{c}</li>\n')
+    lines.append('</ul>\n</details>\n\n')
+    for q, group in zip(QUESTIONNAIRE, uni.answers, strict=True):
+        lines.append(f'## Q: {q}\n\n')
+        for ans in group.answers:
+            lines.append(f'- {markdown_escape(str(ans))}\n')
+    if uni.additional_answers:
+        lines.append('\n## 自由补充\n\n')
+        for a in uni.additional_answers:
+            lines.append(markdown_escape(str(a)) + '\n\n')
+    return ''.join(lines)
+
+
+def write_university_markdown(
+    name: str,
+    uni: University,
+    slug: str,
+    target: Path,
     archived: bool,
 ) -> None:
-    """把 universities 写成 Hugo 的 markdown 页面"""
+    target.write_text(
+        render_university_markdown(name, uni, slug, archived), encoding='utf-8'
+    )
+
+
+def write_markdown_for_universities(
+    universities: dict[str, University],
+    filename_map: FilenameMap,
+    colleges: dict[str, str],
+    archived: bool,
+) -> None:
+    """把 universities 并发写成 Hugo 的 markdown 页面"""
+    tasks: list[tuple[str, University, str, Path]] = []
     for name, uni in universities.items():
         slug = filename_map[name]
-        province = '其他'
-        for key, prov in colleges.items():
-            if name.find(key) >= 0:
-                province = prov
-                break
+        province = find_province(name, colleges)
         target = generate_markdown_path(province, name, archived)
         target_name, is_illegal = sanitize_filename(target.stem)
-        if not (target.parent / '_index.md').exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            (target.parent / '_index.md').touch()
         if is_illegal:
             print(f'[error] {target} 文件名可能非法！')
             target = target.with_stem(target_name)
-        lines: list[str] = [
-            '---\n',
-            f'title: "{name}{" (已归档)" if archived else ""}"\n',
-            f'slug: "{slug}"\n',
-            f'description: 来自 colleges.chat 的{name} 问卷调查信息\n',
-            '---\n\n',
+        tasks.append((name, uni, slug, target))
+
+    for parent in {target.parent for _, _, _, target in tasks}:
+        parent.mkdir(parents=True, exist_ok=True)
+        (parent / '_index.md').touch()
+
+    max_workers = min(32, max(1, (os.cpu_count() or 1) * 4))
+    section = 'archived' if archived else 'active'
+    total = len(tasks)
+    print(f'[info] Start generating {section} markdown files: {total}')
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(
+                write_university_markdown, name, uni, slug, target, archived
+            )
+            for name, uni, slug, target in tasks
         ]
-        lines.append('> 本页面内容来源于问卷，仅供参考。\n\n')
-        lines.append('> 数据来源：\n<details><summary>展开</summary>\n<ul>\n')
-        for c in uni.credits:
-            lines.append(f'<li>{c}</li>\n')
-        lines.append('</ul>\n</details>\n\n')
-        for q, group in zip(QUESTIONNAIRE, uni.answers, strict=True):
-            lines.append(f'## Q: {q}\n\n')
-            for ans in group.answers:
-                lines.append(f'- {markdown_escape(str(ans))}\n')
-        if uni.additional_answers:
-            lines.append('\n## 自由补充\n\n')
-            for a in uni.additional_answers:
-                lines.append(markdown_escape(str(a)) + '\n\n')
-        target.write_text(''.join(lines), encoding='utf-8')
+        completed = 0
+        for future in as_completed(futures):
+            future.result()
+            completed += 1
+            progress = completed / total * 100 if total else 100.0
+            print(
+                f'\r[progress] {section}: {completed}/{total} ({progress:.1f}%)',
+                end='',
+                flush=True,
+            )
+    print()
+
 
 ensure_dirs()
 download_files(REQUIRED_FILES, BASE_URL, ROOT)
@@ -341,4 +390,3 @@ write_markdown_for_universities(universities, FilenameMap(), colleges, archived=
 write_markdown_for_universities(
     universities_archived, FilenameMap(), colleges, archived=True
 )
-
