@@ -9,3 +9,5 @@ dependencies = [
     "python-slugify>=8.0.4",
     "zhconv>=1.4.3",
 ]
+[tool.ty.environment]
+python = "./.venv"
