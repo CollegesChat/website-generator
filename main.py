@@ -12,6 +12,7 @@ from typing import cast
 
 import niquests
 import zhconv
+from pypinyin import Style, lazy_pinyin
 from slugify import slugify
 
 # ================== 配置 ==================
@@ -118,23 +119,42 @@ class University:
         self.credits.extend(other.credits)
 
 
+def make_pinyin_slug(text):
+
+    pinyin_list = lazy_pinyin(text, style=Style.NORMAL)
+
+    pinyin_str = ' '.join(pinyin_list)
+
+    return slugify(pinyin_str)
+
+
 class FileNameMap:
     def __init__(self) -> None:
         self.mapping: dict[str, str] = {}
-        self.used: set[str] = set()
+        self.used_counters: dict[str, int] = {}  # 核心优化：记录每个 base 被用了几次
 
     def __getitem__(self, name: str) -> str:
+        # 1. 缓存命中，直接返回
         if name in self.mapping:
             return self.mapping[name]
-        base = slugify(FILENAME_PREPROCESS.sub('', name))
-        slug = base
-        idx = 1
-        while slug in self.used:
-            idx += 1
-            slug = f'{base}-{idx}'
+
+        # 2. 缓存未命中，生成并注入
+        slug = self._generate_unique_slug(name)
         self.mapping[name] = slug
-        self.used.add(slug)
         return slug
+
+    def _generate_unique_slug(self, name: str) -> str:
+        """负责生成干净、唯一 slug 的私有方法"""
+        base = make_pinyin_slug(FILENAME_PREPROCESS.sub('', name))
+
+        # 如果这个拼音从来没用过，直接初始化计数器并返回
+        if base not in self.used_counters:
+            self.used_counters[base] = 1
+            return base
+
+        # 如果用过了，计数器直接自增，一步到位生成带序号的 slug
+        self.used_counters[base] += 1
+        return f'{base}-{self.used_counters[base]}'
 
 
 # ================== 辅助函数（简体中文注释） ==================
