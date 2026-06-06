@@ -50,7 +50,7 @@ FILENAME_PREPROCESS = re.compile(r'[/>|:&]')
 NORMAL_NAME_MATCHER = re.compile(r'大学|学院|学校')
 
 ROOT = Path('required')
-SITE_DIR = Path(r'D:\Project\questionnaire-report-theme')
+SITE_DIR = Path(os.getenv('SITE_DIR', r'/mnt/data/Project/questionnaire-report-theme'))
 
 REQUIRED_FILES = [
     'README_archived_template.md',
@@ -118,7 +118,7 @@ class University:
         self.credits.extend(other.credits)
 
 
-class FilenameMap:
+class FileNameMap:
     def __init__(self) -> None:
         self.mapping: dict[str, str] = {}
         self.used: set[str] = set()
@@ -226,7 +226,7 @@ def process_universities(universities: dict, colleges: dict) -> None:
                 universities.pop(line.strip(), None)
     wl = ROOT / 'whitelist.txt'
     whitelist = (
-        {l.strip() for l in wl.read_text(encoding='utf-8').splitlines()}
+        {_.strip() for _ in wl.read_text(encoding='utf-8').splitlines()}
         if wl.exists()
         else set()
     )
@@ -302,7 +302,7 @@ def write_university_markdown(
 
 def write_markdown_for_universities(
     universities: dict[str, University],
-    filename_map: FilenameMap,
+    filename_map: FileNameMap,
     colleges: dict[str, str],
     archived: bool,
 ) -> None:
@@ -320,8 +320,8 @@ def write_markdown_for_universities(
 
     for parent in {target.parent for _, _, _, target in tasks}:
         parent.mkdir(parents=True, exist_ok=True)
-        (parent / '_index.md').touch()
-
+        # (parent / '_index.md').touch()
+        (parent / '_index.md').write_text('---\nbookCollapseSection: true\n---')
     max_workers = min(32, max(1, (os.cpu_count() or 1) * 4))
     section = 'archived' if archived else 'active'
     total = len(tasks)
@@ -386,7 +386,7 @@ process_universities(universities, colleges)
 process_universities(universities_archived, colleges)
 
 
-write_markdown_for_universities(universities, FilenameMap(), colleges, archived=False)
+write_markdown_for_universities(universities, FileNameMap(), colleges, archived=False)
 write_markdown_for_universities(
-    universities_archived, FilenameMap(), colleges, archived=True
+    universities_archived, FileNameMap(), colleges, archived=True
 )
