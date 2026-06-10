@@ -2,6 +2,7 @@
 import csv
 import os
 import re
+import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -17,6 +18,19 @@ from loguru import logger
 from pypinyin import Style, lazy_pinyin
 from slugify import slugify
 
+logger.remove()
+
+# 2. 定義你指定的格式
+# <green>、<level>、<cyan> 是 loguru 的顏色標籤，可以讓終端機輸出保持色彩
+# :<8 表示向左對齊並固定佔用 8 個字元空間
+log_format = (
+    '<green>{time:HH:mm:ss.SSS}</green> | '
+    '<level>{level:<6}</level> | '
+    '<cyan>{name}:{line}</cyan> - <level>{message}</level>'
+)
+
+# 3. 重新添加配置到標準輸出（sys.stdout）
+logger.add(sys.stdout, format=log_format, colorize=True)
 # ================== 配置 ==================
 ARCHIVE_TIME = '2023-01-01 00:00:00'
 
@@ -146,15 +160,13 @@ class FileNameMap:
         return slug
 
     def _generate_unique_slug(self, name: str) -> str:
-        """负责生成干净、唯一 slug 的私有方法"""
+        """負責生成乾淨、唯一 slug 的私有方法"""
         base = make_pinyin_slug(FILENAME_PREPROCESS.sub('', name))
 
-        # 如果这个拼音从来没用过，直接初始化计数器并返回
         if base not in self.used_counters:
             self.used_counters[base] = 1
             return base
 
-        # 如果用过了，计数器直接自增，一步到位生成带序号的 slug
         self.used_counters[base] += 1
         return f'{base}-{self.used_counters[base]}'
 
@@ -270,7 +282,7 @@ def ensure_dirs() -> None:
     )
 
 
-def sanitize_filename(filename: str) -> tuple[str, bool]:
+def sanitize_filename(filename: str) -> str:
     """
     清理檔名：
     1. 將正斜線 '/' 與 反斜線 '\' 取代為下底線 '_'
@@ -300,8 +312,9 @@ def sanitize_filename(filename: str) -> tuple[str, bool]:
         current_weight += weight
 
     cleaned = cleaned[:truncated_index]
-
-    return cleaned, cleaned != filename
+    if cleaned != filename:
+        logger.error(f'{filename} 文件名可能非法')
+    return cleaned
 
 
 def find_province(name: str, colleges: dict[str, str]) -> str:
@@ -358,19 +371,17 @@ def write_markdown_for_universities(
     """把 universities 并发写成 Hugo 的 markdown 页面"""
     tasks: list[tuple[str, University, str, Path]] = []
     for name, uni in universities.items():
-        slug = filename_map[name]
-        province = find_province(name, colleges)
-        target = generate_markdown_path(province, name, archived)
-        target_name, is_illegal = sanitize_filename(target.stem)
-        if is_illegal:
-            logger.error(f'{target} 文件名可能非法！')
-            target = target.with_stem(target_name)
-        tasks.append((name, uni, slug, target))
+        cleaned_name = sanitize_filename(name)
+        slug = filename_map[cleaned_name]
+        province = find_province(cleaned_name, colleges)
+        target = generate_markdown_path(province, cleaned_name, archived)
+        tasks.append((cleaned_name, uni, slug, target))
 
     for parent in {target.parent for _, _, _, target in tasks}:
         parent.mkdir(parents=True, exist_ok=True)
         # (parent / '_index.md').touch()
         (parent / '_index.md').write_text('---\nbookCollapseSection: true\n---')
+
     max_workers = min(32, max(1, (os.cpu_count() or 1) * 4))
     section = 'archived' if archived else 'active'
     total = len(tasks)
@@ -378,9 +389,9 @@ def write_markdown_for_universities(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
             executor.submit(
-                write_university_markdown, name, uni, slug, target, archived
+                write_university_markdown, cleaned_name, uni, slug, target, archived
             )
-            for name, uni, slug, target in tasks
+            for cleaned_name, uni, slug, target in tasks
         ]
         completed = 0
         for future in as_completed(futures):
