@@ -1,3 +1,4 @@
+# rewrite from https://github.com/CollegesChat/university-information/blob/bf73bb9c5c57800672e9ea164742d202476bceff/questionnaires/main.py
 import csv
 import os
 import re
@@ -12,6 +13,7 @@ from typing import cast
 
 import niquests
 import zhconv
+from loguru import logger
 from pypinyin import Style, lazy_pinyin
 from slugify import slugify
 
@@ -165,13 +167,13 @@ def download_files(names: list[str], base_url: str, root: Path) -> None:
         local_file = root / name
         if not local_file.exists():
             url = base_url + name
-            print(f'Downloading {name} from {url}...')
+            logger.info(f'Downloading {name} from {url}...')
             r = niquests.get(url)
             if r.status_code == 200:
                 local_file.write_bytes(cast(bytes, r.content))
-                print(f'Saved {name}')
+                logger.info(f'Saved {name}')
             else:
-                print(f'Failed to download {name}, status code: {r.status_code}')
+                logger.error(f'Failed to download {name}, status code: {r.status_code}')
 
 
 def markdown_escape(text: str) -> str:
@@ -233,7 +235,7 @@ def process_universities(universities: dict, colleges: dict) -> None:
                 primary = universities.get(name)
                 if primary is None:
                     # Debug mode may only load a subset; skip missing primary names.
-                    print(f'[warn] alias primary missing: {name}')
+                    logger.warning(f'alias primary missing: {name}')
                     continue
                 for alias in aliases:
                     if alias in universities:
@@ -252,8 +254,8 @@ def process_universities(universities: dict, colleges: dict) -> None:
     )
     for name in list(universities.keys()):
         if NORMAL_NAME_MATCHER.search(name) is None and name not in whitelist:
-            print(
-                f'[warn] maybe invalid: {name} '
+            logger.warning(
+                f'maybe invalid: {name} '
                 + ','.join(f'A{_.answer_id}' for _ in universities[name].credits)
             )
 
@@ -269,9 +271,36 @@ def ensure_dirs() -> None:
 
 
 def sanitize_filename(filename: str) -> tuple[str, bool]:
-    """清理文件名中的非法字符并判断是否被替换"""
-    illegal_pattern = r'[\\/:*?"<>|\0]'
-    cleaned = re.sub(illegal_pattern, '_', str(filename))
+    """
+    清理檔名：
+    1. 將正斜線 '/' 與 反斜線 '\' 取代為下底線 '_'
+    2. 清除其他非法字元與換行符號
+    3. 限制長度（中文算 2 點，英文算 1 點），總長不超過 32 點（相當於 16 個中文，放過英文）
+    """
+    # 1. 先單獨將 / 和 \ 取代為下底線 _
+    # 註：在正則表達式中，反斜線需要四個 \\\\ 或在 r-string 中用 \\ 來表示
+    cleaned = re.sub(r'[\\/]', '_', filename)
+
+    # 2. 清理其他非法字元與換行符號（替換為空字串，避免檔名有太多底線）
+    # 如果你也希望這些變底線，可以把它們合併到上面的步驟
+    other_illegal_pattern = r'[:*?"<>|\0\r\n\t]'
+    cleaned = re.sub(other_illegal_pattern, '', cleaned)
+
+    # 3. 權重截斷（上限 32 點 = 16 個中文 或 32 個英文）
+    max_weight = 32
+    current_weight = 0
+    truncated_index = len(cleaned)
+
+    for i, char in enumerate(cleaned):
+        # 判斷是否為中文字元/全形字元（ASCII 127 以上算中文/全形）
+        weight = 2 if ord(char) > 127 else 1
+        if current_weight + weight > max_weight:
+            truncated_index = i
+            break
+        current_weight += weight
+
+    cleaned = cleaned[:truncated_index]
+
     return cleaned, cleaned != filename
 
 
@@ -334,7 +363,7 @@ def write_markdown_for_universities(
         target = generate_markdown_path(province, name, archived)
         target_name, is_illegal = sanitize_filename(target.stem)
         if is_illegal:
-            print(f'[error] {target} 文件名可能非法！')
+            logger.error(f'{target} 文件名可能非法！')
             target = target.with_stem(target_name)
         tasks.append((name, uni, slug, target))
 
@@ -345,7 +374,7 @@ def write_markdown_for_universities(
     max_workers = min(32, max(1, (os.cpu_count() or 1) * 4))
     section = 'archived' if archived else 'active'
     total = len(tasks)
-    print(f'[info] Start generating {section} markdown files: {total}')
+    logger.info(f'Start generating {section} markdown files: {total}')
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
             executor.submit(
@@ -358,12 +387,12 @@ def write_markdown_for_universities(
             future.result()
             completed += 1
             progress = completed / total * 100 if total else 100.0
-            print(
-                f'\r[progress] {section}: {completed}/{total} ({progress:.1f}%)',
+            logger.info(
+                f'[progress] {section}: {completed}/{total} ({progress:.1f}%)',
                 end='',
                 flush=True,
             )
-    print()
+    logger.info('Finished generating markdown files.')
 
 
 ensure_dirs()
@@ -399,7 +428,7 @@ if 'debug' in argv:
     universities_archived: dict[str, University] = dict(
         sample(list(universities_archived.items()), 100)
     )
-    print(
+    logger.info(
         f'Debug mode: only processing 100 universities each <{len(universities)} and {len(universities_archived)} >.'
     )
 process_universities(universities, colleges)
