@@ -69,6 +69,10 @@ NORMAL_NAME_MATCHER = re.compile(r'大学|学院|学校')
 ROOT = Path('required')
 SITE_DIR = Path(os.getenv('SITE_DIR', r'/mnt/data/Project/questionnaire-report-theme'))
 
+BASE_URL = 'https://raw.githubusercontent.com/CollegesChat/university-information/refs/heads/master/questionnaires/'
+DOC_URL = BASE_URL + 'site/docs/choose-a-college/'
+CSV_URL = 'https://github.com/CollegesChat/china-university-list/releases/latest/download/output.csv'
+# CI 需要手動插入CSV： cat output.csv >> colleges.csv
 REQUIRED_FILES = [
     'README_archived_template.md',
     'README_template.md',
@@ -77,6 +81,7 @@ REQUIRED_FILES = [
     'colleges.csv',
     'results_desensitized.csv',
     'whitelist.txt',
+    CSV_URL,
 ]
 
 REQUIRED_DOCS = [
@@ -84,9 +89,6 @@ REQUIRED_DOCS = [
     '如何正义劝退？.md',
     '影响生活质量的一些方面.md',
 ]
-
-BASE_URL = 'https://raw.githubusercontent.com/CollegesChat/university-information/refs/heads/master/questionnaires/'
-DOC_URL = BASE_URL + 'site/docs/choose-a-college/'
 
 
 # ================== 数据类 ==================
@@ -176,10 +178,15 @@ def download_files(names: list[str], base_url: str, root: Path) -> None:
     """下载缺失的文件到 root 目录"""
     root.mkdir(parents=True, exist_ok=True)
     for name in names:
-        local_file = root / name
+        local_file = Path(
+            root / name if not name.startswith('http') else name.split('/')[-1]
+        )
         if not local_file.exists():
-            url = base_url + name
-            logger.info(f'Downloading {name} from {url}...')
+            if not name.startswith('http'):
+                url = base_url + name
+            else:
+                url = name
+            logger.info(f'Downloading {local_file} from {url}...')
             r = niquests.get(url)
             if r.status_code == 200:
                 local_file.write_bytes(cast(bytes, r.content))
