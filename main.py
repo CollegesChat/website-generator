@@ -74,8 +74,6 @@ DOC_URL = BASE_URL + 'site/docs/choose-a-college/'
 CSV_URL = 'https://github.com/CollegesChat/china-university-list/releases/latest/download/output.csv'
 # CI 需要手動插入CSV： cat output.csv >> colleges.csv
 REQUIRED_FILES = [
-    'README_archived_template.md',
-    'README_template.md',
     'alias.txt',
     'blacklist.txt',
     'colleges.csv',
