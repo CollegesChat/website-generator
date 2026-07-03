@@ -24,7 +24,7 @@ from .config import (
 from .parsers.legacy import meta_extractor as legacy_meta_extractor
 from .parsers.legacy import qnum_extractor as legacy_qnum_extractor
 from .province import NORMAL_NAME_MATCHER, find_province, load_province_mapping
-from .renderer import FileNameMap, write_markdown_for_universities
+from .render import FileNameMap, render_legacy, write_markdown_for_universities
 
 
 def download_files(names: list[str], base_url: str, root: Path) -> None:
@@ -75,11 +75,11 @@ download_files(
 )
 legacy_questionnaire, new_questionnaire = (
     load_questions_from_yaml(parse_yaml(niquests.get(QUESTIONNAIRES_URL[0]).text)),  # type: ignore
-    None,  # type: ignore
+    None,
 )
 
 legacy_df = pl.read_csv(
-    BytesIO(niquests.get(DATA_URL[0]).content), truncate_ragged_lines=True
+    BytesIO(niquests.get(DATA_URL[0]).content or b""), truncate_ragged_lines=True
 )
 legacy_survey_data = QuestionnaireData.from_dataframe(
     legacy_df,
@@ -88,7 +88,7 @@ legacy_survey_data = QuestionnaireData.from_dataframe(
     q_num_extractor=legacy_qnum_extractor,
 )
 
-province_mapping = load_province_mapping(niquests.get(CSV_URL).content)
+province_mapping = load_province_mapping(niquests.get(CSV_URL).content or b"")
 active, archived = collect_universities(legacy_survey_data, uni_q_num=4)
 
 if "debug" in sys.argv:
@@ -108,6 +108,7 @@ write_markdown_for_universities(
     province_mapping,
     archived=False,
     uni_q_num=4,
+    render_fn=render_legacy,
 )
 write_markdown_for_universities(
     archived,
@@ -116,4 +117,5 @@ write_markdown_for_universities(
     province_mapping,
     archived=True,
     uni_q_num=4,
+    render_fn=render_legacy,
 )
