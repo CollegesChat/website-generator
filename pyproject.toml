@@ -7,8 +7,10 @@ requires-python = ">=3.13"
 dependencies = [
     "loguru>=0.7.3",
     "niquests>=3.17.0",
+    "py-yaml12>=0.1.0",
     "pypinyin>=0.55.0",
     "python-slugify>=8.0.4",
+    "wenjuanxing-parser>=0.1.0b2",
     "zhconv>=1.4.3",
 ]
 [tool.ty.environment]
