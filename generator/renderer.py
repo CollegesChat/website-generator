@@ -5,15 +5,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from loguru import logger
+from wenjuanxing_parser._models.questions import AnyQuestion
 from wenjuanxing_parser.models import (
     AnswerValue,
     ChosenOption,
     QuestionnaireResponse,
     ResponseStatus,
 )
-from wenjuanxing_parser._models.questions import AnyQuestion
 
-from .config import FILENAME_PREPROCESS, SITE_DIR
+from .config import SITE_DIR
 from .province import find_province
 from .slug import FileNameMap
 
