@@ -1,25 +1,38 @@
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
-from wenjuanxing_parser._models.questions import AnyQuestion
-from wenjuanxing_parser.models import (
-    AnswerValue,
-    ChosenOption,
-    QuestionnaireResponse,
-    ResponseStatus,
-)
+from wenjuanxing_parser.models import AnswerValue, QuestionnaireResponse
 
-from .config import SITE_DIR
-from .province import find_province
-from .slug import FileNameMap
+from ..config import FILENAME_PREPROCESS, SITE_DIR
+from ..province import find_province
+from ..slug import FileNameMap
+
+
+@dataclass(frozen=True)
+class FormattedAnswer:
+    summary: str
+    detail: str | None = None
+
+
+@dataclass
+class _ResponseEntry:
+    num: int
+    detail: str | None = None
+
+
+type FormatFn = Callable[[AnswerValue], FormattedAnswer | None]
+type RenderFn = Callable[
+    [str, list[QuestionnaireResponse], Mapping, str, bool, int],
+    str,
+]
 
 
 def sanitize_filename(filename: str) -> str:
-    """清理文件名：替换非法字符，权重截断（中文=2, 英文=1, 上限32）"""
     cleaned = re.sub(r"[\\/]", "_", filename)
     cleaned = re.sub(r'[:*?"<>|\0\r\n\t]', "", cleaned)
 
@@ -36,34 +49,6 @@ def sanitize_filename(filename: str) -> str:
     return cleaned[:truncated_index]
 
 
-def format_answer_value(value: AnswerValue) -> str:
-    """将 AnswerValue 转为显示文本"""
-    if value is None:
-        return ""
-    if isinstance(value, ResponseStatus):
-        return str(value)
-    if isinstance(value, str):
-        return value
-    if isinstance(value, ChosenOption):
-        if value.additional_text:
-            return f"{value.text}〖{value.additional_text}〗"
-        return value.text
-    if isinstance(value, list):
-        parts = []
-        for item in value:
-            if isinstance(item, ChosenOption):
-                if item.additional_text:
-                    parts.append(f"{item.text}〖{item.additional_text}〗")
-                else:
-                    parts.append(item.text)
-            else:
-                parts.append(str(item))
-        if all(isinstance(item, (str, ResponseStatus)) for item in value):
-            return "┋".join(parts)
-        return ", ".join(parts)
-    return str(value)
-
-
 def _markdown_escape(text: str) -> str:
     return text.replace("*", "\\*").replace("~", "\\~").replace("_", "\\_")
 
@@ -75,14 +60,63 @@ def generate_markdown_path(province: str, filename: str, archived: bool) -> Path
     return base / "universities" / province / f"{filename}.md"
 
 
-def render_university_markdown(
-    name: str,
+def render_question_groups(
     responses: list[QuestionnaireResponse],
-    questions_map: Mapping[int, AnyQuestion],
-    slug: str,
-    archived: bool,
+    questions_map: Mapping,
     uni_q_num: int,
-) -> str:
+    format_fn: FormatFn,
+) -> list[str]:
+    lines: list[str] = []
+    for q_num, question in sorted(questions_map.items()):
+        if q_num <= uni_q_num:
+            continue
+
+        groups: dict[str, list[_ResponseEntry]] = {}
+        for resp in responses:
+            answer = resp.answers.get(q_num)
+            if answer is None or resp.metadata is None:
+                continue
+            formatted = format_fn(answer.value)
+            if formatted is None:
+                continue
+            groups.setdefault(formatted.summary, []).append(
+                _ResponseEntry(num=resp.metadata.num, detail=formatted.detail),
+            )
+
+        if not groups:
+            continue
+
+        lines.append(f"## Q: {question.title}\n\n")
+        lines.append("<ul>\n")
+        for summary_text, entries in groups.items():
+            count = len(entries)
+            escaped = _markdown_escape(summary_text)
+
+            if count == 1:
+                entry = entries[0]
+                if entry.detail:
+                    lines.append(
+                        f"<li>A{entry.num}: {_markdown_escape(entry.detail)}</li>\n"
+                    )
+                else:
+                    lines.append(
+                        f"<li>A{entry.num}: {escaped}</li>\n"
+                    )
+            else:
+                lines.append(
+                    f"<li>\n<details><summary>{escaped} x {count}</summary>\n"
+                )
+                ids = " ".join(f"A{e.num}" for e in entries)
+                lines.append(f"<div>{ids}</div>\n")
+                lines.append("</details></li>\n")
+        lines.append("</ul>\n\n")
+
+    return lines
+
+
+def _build_header(
+    name: str, slug: str, archived: bool, responses: list[QuestionnaireResponse]
+) -> list[str]:
     lines: list[str] = [
         "---\n",
         f'title: "{name}{" (已归档)" if archived else ""}"\n',
@@ -98,46 +132,33 @@ def render_university_markdown(
                 f"<li>A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月})</li>\n"
             )
     lines.append("</ul>\n</details>\n\n")
-
-    for q_num, question in sorted(questions_map.items()):
-        if q_num <= uni_q_num:
-            continue
-        lines.append(f"## Q: {question.title}\n\n")
-        for resp in responses:
-            answer = resp.answers.get(q_num)
-            if answer is not None and resp.metadata is not None:
-                text = format_answer_value(answer.value)
-                if text:
-                    lines.append(f"- A{resp.metadata.num}: {_markdown_escape(text)}\n")
-        lines.append("\n")
-
-    return "".join(lines)
+    return lines
 
 
 def _write_one(
     name: str,
     responses: list[QuestionnaireResponse],
-    questions_map: Mapping[int, AnyQuestion],
+    questions_map: Mapping,
     slug: str,
     target: Path,
     archived: bool,
     uni_q_num: int,
+    render_fn: RenderFn,
 ) -> None:
     target.write_text(
-        render_university_markdown(
-            name, responses, questions_map, slug, archived, uni_q_num
-        ),
+        render_fn(name, responses, questions_map, slug, archived, uni_q_num),
         encoding="utf-8",
     )
 
 
 def write_markdown_for_universities(
     universities: dict[str, list[QuestionnaireResponse]],
-    questions_map: Mapping[int, AnyQuestion],
+    questions_map: Mapping,
     filename_map: FileNameMap,
     province_mapping: list[tuple[str, str]],
     archived: bool,
     uni_q_num: int,
+    render_fn: RenderFn,
 ) -> None:
     tasks: list[tuple[str, list[QuestionnaireResponse], str, Path]] = []
     for name, responses in universities.items():
@@ -166,6 +187,7 @@ def write_markdown_for_universities(
                 target,
                 archived,
                 uni_q_num,
+                render_fn,
             )
             for name, responses, slug, target in tasks
         ]
