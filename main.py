@@ -1,1 +1,1 @@
-from generator import __main__ # noqa
+from generator import __main__  # noqa
