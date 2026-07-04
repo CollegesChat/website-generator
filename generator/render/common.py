@@ -1,17 +1,27 @@
 import os
 import re
+import sys
 from collections.abc import Callable, Mapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+import zhconv
 from loguru import logger
 from wenjuanxing_parser.models import AnswerValue, QuestionnaireResponse
 
 from ..config import SITE_DIR
 from ..province import find_province
 from ..slug import FileNameMap
+
+
+def _is_ci() -> bool:
+    return not sys.stdout.isatty() or bool(os.environ.get("CI"))
+
+
+def _to_simplified(text: str) -> str:
+    return zhconv.convert(text, "zh-cn")
 
 
 @dataclass(frozen=True)
@@ -92,7 +102,7 @@ def render_question_groups(
         if not groups:
             continue
 
-        lines.append(f"## Q: {question.title}\n\n")
+        lines.append(f"## Q: {_to_simplified(question.title)}\n\n")
         for summary_text, entries in groups.items():
             count = len(entries)
             escaped = _markdown_escape(summary_text)
@@ -132,11 +142,12 @@ def render_question_groups(
 def _build_header(
     name: str, slug: str, archived: bool, responses: list[QuestionnaireResponse]
 ) -> list[str]:
+    display_name = _to_simplified(name)
     lines: list[str] = [
         "---\n",
-        f'title: "{name}{" (已归档)" if archived else ""}"\n',
+        f'title: "{display_name}{" (已归档)" if archived else ""}"\n',
         f'slug: "{slug}"\n',
-        f"description: 来自 colleges.chat 的{name} 问卷调查信息\n",
+        f"description: 来自 colleges.chat 的{display_name} 问卷调查信息\n",
         "---\n\n",
     ]
     lines.append("> 本页面内容来源于问卷，仅供参考。\n\n")
@@ -160,11 +171,10 @@ def _write_one(
     archived: bool,
     uni_q_num: int,
     render_fn: RenderFn,
-) -> None:
-    target.write_text(
-        render_fn(name, responses, questions_map, slug, archived, uni_q_num),
-        encoding="utf-8",
-    )
+) -> str:
+    content = render_fn(name, responses, questions_map, slug, archived, uni_q_num)
+    target.write_text(content, encoding="utf-8")
+    return name
 
 
 def write_markdown_for_universities(
@@ -184,16 +194,20 @@ def write_markdown_for_universities(
         target = generate_markdown_path(province, cleaned_name, archived)
         tasks.append((cleaned_name, responses, slug, target))
 
-    for parent in {target.parent for _, _, _, target in tasks}:
-        parent.mkdir(parents=True, exist_ok=True)
-        (parent / "_index.md").write_text("---\nbookCollapseSection: true\n---")
+    written_dirs: set[Path] = set()
+    for _, _, _, target in tasks:
+        parent = target.parent
+        if parent not in written_dirs:
+            parent.mkdir(parents=True, exist_ok=True)
+            (parent / "_index.md").write_text("---\nbookCollapseSection: true\n---")
+            written_dirs.add(parent)
 
-    max_workers = min(32, max(1, (os.cpu_count() or 1) * 4))
+    max_workers = os.cpu_count() or 1
     section = "archived" if archived else "active"
     total = len(tasks)
     logger.info(f"Start generating {section} markdown files: {total}")
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
             executor.submit(
                 _write_one,
                 name,
@@ -204,15 +218,46 @@ def write_markdown_for_universities(
                 archived,
                 uni_q_num,
                 render_fn,
-            )
+            ): name
             for name, responses, slug, target in tasks
-        ]
+        }
         completed = 0
-        for future in as_completed(futures):
-            future.result()
-            completed += 1
-            progress = completed / total * 100 if total else 100.0
-            logger.info(
-                f"[progress] {section}: {completed}/{total} ({progress:.1f}%)",
+        if _is_ci():
+            bar_width = 30
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    future.result()
+                except Exception:
+                    logger.exception(f"Failed to render {name}")
+                completed += 1
+                filled = int(bar_width * completed / total) if total else bar_width
+                bar = "=" * filled + ">" + " " * (bar_width - filled)
+                sys.stdout.write(f"\r[{section}] [{bar}] {completed}/{total}")
+                sys.stdout.flush()
+            sys.stdout.write("\n")
+        else:
+            from rich.progress import (
+                BarColumn,
+                Progress,
+                TaskProgressColumn,
+                TextColumn,
+                TimeRemainingColumn,
             )
+
+            with Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeRemainingColumn(),
+            ) as progress:
+                task_id = progress.add_task(f"[cyan]{section}", total=total)
+                for future in as_completed(futures):
+                    name = futures[future]
+                    try:
+                        future.result()
+                    except Exception:
+                        logger.exception(f"Failed to render {name}")
+                    completed += 1
+                    progress.update(task_id, completed=completed)
     logger.info("Finished generating markdown files.")

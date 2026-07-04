@@ -7,7 +7,7 @@ from wenjuanxing_parser.models import (
     SelectedOption,
 )
 
-from .common import FormattedAnswer, _markdown_escape, render_question_groups
+from .common import FormattedAnswer, _markdown_escape, _to_simplified, render_question_groups
 
 V2_META_Q_NUMS = [3, 4, 5]
 
@@ -61,11 +61,12 @@ def _build_header_v2(
     responses: list[QuestionnaireResponse],
     meta_q_nums: list[int],
 ) -> list[str]:
+    display_name = _to_simplified(name)
     lines: list[str] = [
         "---\n",
-        f'title: "{name}{" (已归档)" if archived else ""}"\n',
+        f'title: "{display_name}{" (已归档)" if archived else ""}"\n',
         f'slug: "{slug}"\n',
-        f"description: 来自 colleges.chat 的{name} 问卷调查信息\n",
+        f"description: 来自 colleges.chat 的{display_name} 问卷调查信息\n",
         "---\n\n",
     ]
     lines.append("> 本页面内容来源于问卷，仅供参考。\n\n")
