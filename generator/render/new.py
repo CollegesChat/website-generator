@@ -69,7 +69,8 @@ def _build_header_v2(
         "---\n\n",
     ]
     lines.append("> 本页面内容来源于问卷，仅供参考。\n\n")
-    lines.append("> 数据来源：\n<details><summary>展开</summary>\n<ul>\n")
+    lines.append("> 数据来源：\n\n")
+    lines.append('{{% details title="展开" %}}\n\n')
     for resp in responses:
         if resp.metadata is None:
             continue
@@ -83,14 +84,14 @@ def _build_header_v2(
         meta_str = ", ".join(meta_parts)
         if meta_str:
             lines.append(
-                f"<li>A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月}): "
-                f"{_markdown_escape(meta_str)}</li>\n"
+                f"- A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月}): "
+                f"{_markdown_escape(meta_str)}\n"
             )
         else:
             lines.append(
-                f"<li>A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月})</li>\n"
+                f"- A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月})\n"
             )
-    lines.append("</ul>\n</details>\n\n")
+    lines.append("\n{{% /details %}}\n\n")
     return lines
 
 
