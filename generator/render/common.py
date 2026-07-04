@@ -4,11 +4,12 @@ from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from loguru import logger
 from wenjuanxing_parser.models import AnswerValue, QuestionnaireResponse
 
-from ..config import FILENAME_PREPROCESS, SITE_DIR
+from ..config import SITE_DIR
 from ..province import find_province
 from ..slug import FileNameMap
 
@@ -25,7 +26,7 @@ class _ResponseEntry:
     detail: str | None = None
 
 
-type FormatFn = Callable[[AnswerValue], FormattedAnswer | None]
+type FormatFn = Callable[[AnswerValue], FormattedAnswer | list[FormattedAnswer] | None]
 type RenderFn = Callable[
     [str, list[QuestionnaireResponse], Mapping, str, bool, int],
     str,
@@ -79,15 +80,19 @@ def render_question_groups(
             formatted = format_fn(answer.value)
             if formatted is None:
                 continue
-            groups.setdefault(formatted.summary, []).append(
-                _ResponseEntry(num=resp.metadata.num, detail=formatted.detail),
-            )
+            if isinstance(formatted, list):
+                formatted_list = cast("list[FormattedAnswer]", formatted)
+            else:
+                formatted_list = [formatted]
+            for fmt in formatted_list:
+                groups.setdefault(fmt.summary, []).append(
+                    _ResponseEntry(num=resp.metadata.num, detail=fmt.detail),
+                )
 
         if not groups:
             continue
 
         lines.append(f"## Q: {question.title}\n\n")
-        lines.append("<ul>\n")
         for summary_text, entries in groups.items():
             count = len(entries)
             escaped = _markdown_escape(summary_text)
@@ -96,20 +101,29 @@ def render_question_groups(
                 entry = entries[0]
                 if entry.detail:
                     lines.append(
-                        f"<li>A{entry.num}: {_markdown_escape(entry.detail)}</li>\n"
+                        f"- A{entry.num}: {escaped}: {_markdown_escape(entry.detail)}\n"
                     )
                 else:
-                    lines.append(
-                        f"<li>A{entry.num}: {escaped}</li>\n"
-                    )
+                    lines.append(f"- A{entry.num}: {escaped}\n")
             else:
-                lines.append(
-                    f"<li>\n<details><summary>{escaped} x {count}</summary>\n"
-                )
-                ids = " ".join(f"A{e.num}" for e in entries)
-                lines.append(f"<div>{ids}</div>\n")
-                lines.append("</details></li>\n")
-        lines.append("</ul>\n\n")
+                lines.append(f'- {{{{% details title="{escaped} x {count}" %}}}}\n\n')
+                no_detail_nums: list[str] = []
+                detail_lines: list[str] = []
+                for entry in entries:
+                    if entry.detail:
+                        detail_lines.append(
+                            f"  - A{entry.num}: {_markdown_escape(entry.detail)}"
+                        )
+                    else:
+                        no_detail_nums.append(f"A{entry.num}")
+                if no_detail_nums:
+                    lines.append("  " + " ".join(no_detail_nums) + "\n")
+                if no_detail_nums and detail_lines:
+                    lines.append("\n  ---\n")
+                for dl in detail_lines:
+                    lines.append(dl + "\n")
+                lines.append("\n  {{% /details %}}\n")
+        lines.append("\n")
 
     return lines
 

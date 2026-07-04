@@ -12,7 +12,9 @@ from .common import FormattedAnswer, _markdown_escape, render_question_groups
 V2_META_Q_NUMS = [3, 4, 5]
 
 
-def format_answer_new(value: AnswerValue) -> FormattedAnswer | None:
+def format_answer_new(
+    value: AnswerValue,
+) -> FormattedAnswer | list[FormattedAnswer] | None:
     if value is None or isinstance(value, ResponseStatus):
         return None
     if isinstance(value, str):
@@ -22,20 +24,15 @@ def format_answer_new(value: AnswerValue) -> FormattedAnswer | None:
     if isinstance(value, SelectedOption):
         return FormattedAnswer(summary=value.text, detail=value.additional_text)
     if isinstance(value, list):
-        summaries: list[str] = []
-        details: list[str] = []
+        results: list[FormattedAnswer] = []
         for item in value:
             if isinstance(item, SelectedOption):
-                summaries.append(item.text)
-                if item.additional_text:
-                    details.append(item.additional_text)
+                results.append(
+                    FormattedAnswer(summary=item.text, detail=item.additional_text)
+                )
             elif isinstance(item, str) and item.strip():
-                summaries.append(item)
-        if not summaries:
-            return None
-        summary = ", ".join(summaries)
-        detail = "，".join(details) if details else None
-        return FormattedAnswer(summary=summary, detail=detail)
+                results.append(FormattedAnswer(summary=item))
+        return results or None
     return FormattedAnswer(summary=str(value))
 
 

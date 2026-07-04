@@ -2,7 +2,6 @@ import sys
 from collections import defaultdict
 from io import BytesIO
 from pathlib import Path
-from random import sample
 from typing import cast
 
 import niquests
@@ -23,8 +22,13 @@ from .config import (
 )
 from .parsers.legacy import meta_extractor as legacy_meta_extractor
 from .parsers.legacy import qnum_extractor as legacy_qnum_extractor
-from .province import NORMAL_NAME_MATCHER, find_province, load_province_mapping
-from .render import FileNameMap, render_legacy, write_markdown_for_universities
+from .province import NORMAL_NAME_MATCHER, load_province_mapping
+from .render import (
+    FileNameMap,
+    render_legacy,
+    render_new,
+    write_markdown_for_universities,
+)
 
 
 def download_files(names: list[str], base_url: str, root: Path) -> None:
@@ -69,53 +73,74 @@ def collect_universities(
     return dict(universities), dict(universities_archived)
 
 
-logger.info("开始检查并同步远程资源文件...")
-download_files(
-    REQUIRED_DOCS, DOC_URL, SITE_DIR / "content" / "docs" / "choose-a-college"
-)
-legacy_questionnaire, new_questionnaire = (
-    load_questions_from_yaml(parse_yaml(niquests.get(QUESTIONNAIRES_URL[0]).text)),  # type: ignore
-    None,
-)
-
-legacy_df = pl.read_csv(
-    BytesIO(niquests.get(DATA_URL[0]).content or b""), truncate_ragged_lines=True
-)
-legacy_survey_data = QuestionnaireData.from_dataframe(
-    legacy_df,
-    legacy_questionnaire,
-    meta_extractor=legacy_meta_extractor,
-    q_num_extractor=legacy_qnum_extractor,
-)
-
-province_mapping = load_province_mapping(niquests.get(CSV_URL).content or b"")
-active, archived = collect_universities(legacy_survey_data, uni_q_num=4)
+V2_YAML_PATH = Path("/mnt/data/Project/questionnaire/v2.yaml")
 
 if "debug" in sys.argv:
-    active = dict(sample(list(active.items()), min(100, len(active))))
-    archived = dict(sample(list(archived.items()), min(100, len(archived))))
-    logger.info(f"Debug mode: {len(active)} active, {len(archived)} archived")
+    logger.info("Debug mode: 使用本地 v2.yaml + 随机 mock 数据")
+    with open(V2_YAML_PATH, encoding="utf-8") as f:
+        v2_questionnaire = load_questions_from_yaml(parse_yaml(f.read()))  # type: ignore
+    from .mock import generate_mock_v2_data
 
-for name in list(active) + list(archived):
-    if not NORMAL_NAME_MATCHER.search(name):
-        logger.warning(f"maybe invalid: {name}")
+    active, archived, province_mapping = generate_mock_v2_data(v2_questionnaire)
+    logger.info(f"Mock data: {len(active)} universities")
 
-filename_map = FileNameMap()
-write_markdown_for_universities(
-    active,
-    legacy_questionnaire,
-    filename_map,
-    province_mapping,
-    archived=False,
-    uni_q_num=4,
-    render_fn=render_legacy,
-)
-write_markdown_for_universities(
-    archived,
-    legacy_questionnaire,
-    filename_map,
-    province_mapping,
-    archived=True,
-    uni_q_num=4,
-    render_fn=render_legacy,
-)
+    for name in active:
+        if not NORMAL_NAME_MATCHER.search(name):
+            logger.warning(f"maybe invalid: {name}")
+
+    filename_map = FileNameMap()
+    write_markdown_for_universities(
+        active,
+        v2_questionnaire,
+        filename_map,
+        province_mapping,
+        archived=False,
+        uni_q_num=2,
+        render_fn=render_new,
+    )
+else:
+    logger.info("开始检查并同步远程资源文件...")
+    download_files(
+        REQUIRED_DOCS, DOC_URL, SITE_DIR / "content" / "docs" / "choose-a-college"
+    )
+    legacy_questionnaire, new_questionnaire = (
+        load_questions_from_yaml(parse_yaml(niquests.get(QUESTIONNAIRES_URL[0]).text)),  # type: ignore
+        None,
+    )
+
+    legacy_df = pl.read_csv(
+        BytesIO(niquests.get(DATA_URL[0]).content or b""), truncate_ragged_lines=True
+    )
+    legacy_survey_data = QuestionnaireData.from_dataframe(
+        legacy_df,
+        legacy_questionnaire,
+        meta_extractor=legacy_meta_extractor,
+        q_num_extractor=legacy_qnum_extractor,
+    )
+
+    province_mapping = load_province_mapping(niquests.get(CSV_URL).content or b"")
+    active, archived = collect_universities(legacy_survey_data, uni_q_num=4)
+
+    for name in list(active) + list(archived):
+        if not NORMAL_NAME_MATCHER.search(name):
+            logger.warning(f"maybe invalid: {name}")
+
+    filename_map = FileNameMap()
+    write_markdown_for_universities(
+        active,
+        legacy_questionnaire,
+        filename_map,
+        province_mapping,
+        archived=False,
+        uni_q_num=4,
+        render_fn=render_legacy,
+    )
+    write_markdown_for_universities(
+        archived,
+        legacy_questionnaire,
+        filename_map,
+        province_mapping,
+        archived=True,
+        uni_q_num=4,
+        render_fn=render_legacy,
+    )
