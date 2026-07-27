@@ -7,7 +7,12 @@ from wenjuanxing_parser.models import (
     SelectedOption,
 )
 
-from .common import FormattedAnswer, _markdown_escape, _to_simplified, render_question_groups
+from .common import (
+    FormattedAnswer,
+    _markdown_escape,
+    _to_simplified,
+    render_question_groups,
+)
 
 V2_META_Q_NUMS = [3, 4, 5]
 
