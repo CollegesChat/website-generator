@@ -117,7 +117,9 @@ def render_question_groups(
                     lines.append(f"- A{entry.num}: {escaped}\n")
             else:
                 title_escaped = re.sub(r'["\r\n]', "", escaped)
-                lines.append(f'- {{{{% details title="{title_escaped} x {count}" %}}}}\n\n')
+                lines.append(
+                    f'- {{{{% details title="{title_escaped} x {count}" %}}}}\n\n'
+                )
                 no_detail_nums: list[str] = []
                 detail_lines: list[str] = []
                 for entry in entries:
