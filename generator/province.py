@@ -1,9 +1,11 @@
-import re
 from io import BytesIO
 
 import polars as pl
+import regex as re
 
 NORMAL_NAME_MATCHER = re.compile(r"大学|学院|学校")
+NON_CHINESE_MATCHER = re.compile(r"^[\p{L}\p{P}\p{Zs}]+$")
+# use https://regex101.com/ for test.
 
 
 def load_province_mapping(csv_bytes: bytes) -> list[tuple[str, str]]:
@@ -11,7 +13,7 @@ def load_province_mapping(csv_bytes: bytes) -> list[tuple[str, str]]:
     df = pl.read_csv(
         BytesIO(csv_bytes), has_header=False, new_columns=["province", "name"]
     )
-    pairs = list(zip(df["name"].to_list(), df["province"].to_list()))
+    pairs = list(zip(df["name"].to_list(), df["province"].to_list(), strict=True))
     pairs.sort(key=lambda p: len(p[0]), reverse=True)
     return pairs
 
@@ -20,6 +22,8 @@ def find_province(name: str, mapping: list[tuple[str, str]]) -> str:
     for key, prov in mapping:
         if key in name:
             return prov
-    if not NORMAL_NAME_MATCHER.search(name):
+    if NON_CHINESE_MATCHER.search(name):
         return "国外"
-    return "其他"
+    if not NORMAL_NAME_MATCHER.search(name):
+        return "不予收录"
+    return "无效"
