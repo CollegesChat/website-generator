@@ -29,4 +29,4 @@ def find_province(name: str, mapping: list[tuple[str, str]]) -> str:
         return "国外"
     if not NORMAL_NAME_MATCHER.search(name):
         return "不予收录"
-    return "无效"
+    return "国外"
