@@ -188,20 +188,26 @@ def write_markdown_for_universities(
     uni_q_num: int,
     render_fn: RenderFn,
 ) -> None:
-    tasks: list[tuple[str, list[QuestionnaireResponse], str, Path]] = []
+    # 在 task 元组中加入 province
+    tasks: list[tuple[str, list[QuestionnaireResponse], str, Path, str]] = []
     for name, responses in universities.items():
         cleaned_name = sanitize_filename(name)
         slug = filename_map[cleaned_name]
         province = find_province(cleaned_name, province_mapping)
+
         target = generate_markdown_path(province, cleaned_name, archived)
-        tasks.append((cleaned_name, responses, slug, target))
+        tasks.append((cleaned_name, responses, slug, target, province))
 
     written_dirs: set[Path] = set()
-    for _, _, _, target in tasks:
+    for _, _, _, target, province in tasks:
         parent = target.parent
         if parent not in written_dirs:
             parent.mkdir(parents=True, exist_ok=True)
-            (parent / "_index.md").write_text("---\nbookCollapseSection: true\n---")
+            weight_str = "\nweight: 10" if province in ["国外", "不予收录"] else ""
+            (parent / "_index.md").write_text(
+                data=f"---\nbookCollapseSection: true{weight_str}\n---",
+                encoding="utf-8",
+            )
             written_dirs.add(parent)
 
     max_workers = os.cpu_count() or 1
@@ -221,7 +227,7 @@ def write_markdown_for_universities(
                 uni_q_num,
                 render_fn,
             ): name
-            for name, responses, slug, target in tasks
+            for name, responses, slug, target, _ in tasks
         }
         completed = 0
         if _is_ci():
