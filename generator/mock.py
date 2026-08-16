@@ -1,8 +1,9 @@
 import random
 from collections import defaultdict
 from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from wenjuanxing_parser._models.base import IP, BasicData
 from wenjuanxing_parser._models.questions import (
@@ -134,8 +135,8 @@ EDU_GRADES = ["大一", "大二", "大三", "大四", "研一", "研二", "研�
 
 
 def _random_date(start_year: int = 2024, end_year: int = 2026) -> datetime:
-    start = datetime(start_year, 1, 1, tzinfo=UTC)
-    end = datetime(end_year, 6, 30, tzinfo=UTC)
+    start = datetime(start_year, 1, 1, tzinfo=ZoneInfo("Asia/Shanghai"))
+    end = datetime(end_year, 6, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
     delta = (end - start).days
     return start + timedelta(days=random.randint(0, delta))
 
