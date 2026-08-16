@@ -92,7 +92,7 @@ MAJORS = [
 
 YEARS = ["2022-09", "2023-09", "2024-09", "2025-09"]
 
-GENDERS = ["男", "女"]
+GENDERS = ["男", "女", "（不愿透露）"]
 
 SHORT_TEXTS = [
     "还可以",
@@ -208,7 +208,11 @@ def _gen_fill_blank(question: FillBlankQuestion) -> UserAnswer:
                 if isinstance(default, dict) and i in default:
                     blanks.append(default[i])
                 elif isinstance(default, list) and i - 1 < len(default):
-                    blanks.append(default[i - 1])
+                    value = default[i - 1]
+                    if isinstance(value, str):
+                        blanks.append(value)
+                    else:
+                        blanks.append(ResponseStatus.SKIPPED)
                 else:
                     blanks.append(ResponseStatus.SKIPPED)
             else:
