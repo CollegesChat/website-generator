@@ -22,7 +22,7 @@ from .config import (
 )
 from .parsers.legacy import meta_extractor as legacy_meta_extractor
 from .parsers.legacy import qnum_extractor as legacy_qnum_extractor
-from .province import NORMAL_NAME_MATCHER, load_province_mapping
+from .province import load_province_mapping
 from .render import (
     FileNameMap,
     render_legacy,
@@ -50,6 +50,8 @@ def download_files(names: list[str], base_url: str, root: Path) -> None:
                 logger.info(f"Saved {name}")
             else:
                 logger.error(f"Failed to download {name}, status code: {r.status_code}")
+        else:
+            logger.warning(f"Skipped: {local_file.relative_to(root)} already exists")
 
 
 def collect_universities(
@@ -83,11 +85,6 @@ if "debug" in sys.argv:
 
     active, archived, province_mapping = generate_mock_v2_data(v2_questionnaire)
     logger.info(f"Mock data: {len(active)} universities")
-
-    for name in active:
-        if not NORMAL_NAME_MATCHER.search(name):
-            logger.warning(f"maybe invalid: {name}")
-
     filename_map = FileNameMap()
     write_markdown_for_universities(
         active,
@@ -120,11 +117,6 @@ else:
 
     province_mapping = load_province_mapping(niquests.get(CSV_URL).content or b"")
     active, archived = collect_universities(legacy_survey_data, uni_q_num=4)
-
-    for name in list(active) + list(archived):
-        if not NORMAL_NAME_MATCHER.search(name):
-            logger.warning(f"maybe invalid: {name}")
-
     filename_map = FileNameMap()
     write_markdown_for_universities(
         active,

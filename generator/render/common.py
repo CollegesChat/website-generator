@@ -62,6 +62,8 @@ def sanitize_filename(filename: str) -> str:
 
 def _markdown_escape(text: str) -> str:
     return text.replace("*", "\\*").replace("~", "\\~").replace("_", "\\_")
+# FIXME: 考虑替换HTML标签 + 更多
+# 考虑替换为HTML实体标签
 
 
 def generate_markdown_path(province: str, filename: str, archived: bool) -> Path:
@@ -236,8 +238,8 @@ def write_markdown_for_universities(
                 name = futures[future]
                 try:
                     future.result()
-                except Exception:
-                    logger.exception(f"Failed to render {name}")
+                except OSError as e:
+                    logger.exception(f"Failed to render {name}, {e!r}")
                 completed += 1
                 filled = int(bar_width * completed / total) if total else bar_width
                 bar = "=" * filled + ">" + " " * (bar_width - filled)
@@ -264,8 +266,8 @@ def write_markdown_for_universities(
                     name = futures[future]
                     try:
                         future.result()
-                    except Exception:
-                        logger.exception(f"Failed to render {name}")
+                    except OSError as e:
+                        logger.exception(f"Failed to render {name}, {e!r}")
                     completed += 1
                     progress.update(task_id, completed=completed)
     logger.info("Finished generating markdown files.")
