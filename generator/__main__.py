@@ -1,13 +1,16 @@
 import sys
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from io import BytesIO
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 import niquests
 import polars as pl
 from loguru import logger
 from wenjuanxing_parser import QuestionnaireData, load_questions_from_yaml
+from wenjuanxing_parser.models import QuestionnaireResponse
 from yaml12 import parse_yaml
 
 from .config import (
@@ -22,6 +25,8 @@ from .config import (
 )
 from .parsers.legacy import meta_extractor as legacy_meta_extractor
 from .parsers.legacy import qnum_extractor as legacy_qnum_extractor
+from .parsers.new import meta_extractor as new_meta_extractor
+from .parsers.new import qnum_extractor as new_qnum_extractor
 from .province import load_province_mapping
 from .render import (
     FileNameMap,
@@ -55,10 +60,11 @@ def download_files(names: list[str], base_url: str, root: Path) -> None:
 
 
 def collect_universities(
-    survey_data: QuestionnaireData,
+    survey_data: Iterable[QuestionnaireResponse],
     uni_q_num: int,
 ) -> tuple[dict[str, list], dict[str, list]]:
     """遍历问卷数据，按学校名分组，并按 ARCHIVE_TIME 分为 active / archived"""
+    archive_time = ARCHIVE_TIME.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
     universities: defaultdict[str, list] = defaultdict(list)
     universities_archived: defaultdict[str, list] = defaultdict(list)
     for resp in survey_data:
@@ -68,14 +74,43 @@ def collect_universities(
         name = NAME_PREPROCESS.sub("", str(uni_answer.value)).strip()
         if not name:
             continue
-        if resp.metadata and resp.metadata.answer_date < ARCHIVE_TIME:
-            universities_archived[name].append(resp)
-        else:
-            universities[name].append(resp)
+        if resp.metadata:
+            answer_date = resp.metadata.answer_date
+            if answer_date.tzinfo is None:
+                answer_date = answer_date.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+            if answer_date < archive_time:
+                universities_archived[name].append(resp)
+                continue
+        universities[name].append(resp)
     return dict(universities), dict(universities_archived)
 
 
 V2_YAML_PATH = Path("/mnt/data/Project/questionnaire/v2.yaml")
+
+
+def load_debug_responses(
+    path: Path, questionnaire: Mapping[int, Any]
+) -> list[QuestionnaireResponse]:
+    """读取 debug 模式下额外提供的 CSV/XLSX 答卷。"""
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        df = pl.read_csv(path, truncate_ragged_lines=True)
+    elif suffix in {".xlsx", ".xlsm", ".xlsb"}:
+        df = pl.read_excel(path)
+    else:
+        raise ValueError(
+            f"不支持的 debug 数据文件格式: {path.suffix or '(无扩展名)'}，"
+            "仅支持 .csv、.xlsx、.xlsm、.xlsb"
+        )
+
+    responses = QuestionnaireData.from_dataframe(
+        df,
+        questionnaire,
+        meta_extractor=new_meta_extractor,
+        q_num_extractor=new_qnum_extractor,
+    )
+    return list(responses)
+
 
 if "debug" in sys.argv:
     logger.info("Debug mode: 使用本地 v2.yaml + 随机 mock 数据")
@@ -83,7 +118,20 @@ if "debug" in sys.argv:
         v2_questionnaire = load_questions_from_yaml(parse_yaml(f.read()))  # type: ignore
     from .mock import generate_mock_v2_data
 
-    active, archived, province_mapping = generate_mock_v2_data(v2_questionnaire)
+    mock_responses, province_mapping = generate_mock_v2_data(v2_questionnaire)
+    file_responses: list[QuestionnaireResponse] = []
+    debug_args = sys.argv[sys.argv.index("debug") + 1 :]
+    if len(debug_args) > 1:
+        raise SystemExit("用法: python -m generator debug [答卷.csv|答卷.xlsx]")
+    if debug_args:
+        debug_path = Path(debug_args[0]).expanduser()
+        if not debug_path.is_file():
+            raise SystemExit(f"debug 数据文件不存在: {debug_path}")
+        file_responses = load_debug_responses(debug_path, v2_questionnaire)
+        logger.info(f"Loaded {len(file_responses)} responses from {debug_path}")
+    active, archived = collect_universities(
+        [*mock_responses, *file_responses], uni_q_num=2
+    )
     logger.info(f"Mock data: {len(active)} universities")
     filename_map = FileNameMap()
     write_markdown_for_universities(
