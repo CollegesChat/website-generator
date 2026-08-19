@@ -6,18 +6,9 @@ import polars as pl
 from wenjuanxing_parser.models import IP, BasicData
 
 
-class LegacyBasicData(BasicData):
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"answer_date={self.answer_date!r}, "
-            f"num={self.num!r})"
-        )
-
-
-def meta_extractor(df: pl.DataFrame, idx: Any) -> LegacyBasicData | None:
+def meta_extractor(df: pl.DataFrame, idx: Any) -> BasicData | None:
     row = df.row(idx, named=True)
-    return LegacyBasicData(
+    return BasicData(
         answer_date=datetime.fromisoformat(str(row["开始时间"])),
         num=int(row["答题序号"]),
         time_used=timedelta(0),
