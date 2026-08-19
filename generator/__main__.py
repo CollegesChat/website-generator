@@ -25,7 +25,6 @@ from .config import (
 )
 from .parsers.legacy import meta_extractor as legacy_meta_extractor
 from .parsers.legacy import qnum_extractor as legacy_qnum_extractor
-from .parsers.new import meta_extractor as new_meta_extractor
 from .parsers.new import qnum_extractor as new_qnum_extractor
 from .province import find_province, load_province_mapping
 from .render import (
@@ -106,20 +105,20 @@ def load_debug_responses(
 ) -> list[QuestionnaireResponse]:
     """读取 debug 模式下额外提供的 CSV/XLSX 答卷。"""
     suffix = path.suffix.lower()
-    if suffix == ".csv":
-        df = pl.read_csv(path, truncate_ragged_lines=True)
-    elif suffix in {".xlsx", ".xlsm", ".xlsb"}:
-        df = pl.read_excel(path)
-    else:
-        raise ValueError(
-            f"不支持的 debug 数据文件格式: {path.suffix or '(无扩展名)'}，"
-            "仅支持 .csv、.xlsx、.xlsm、.xlsb"
-        )
+    match suffix:
+        case ".csv":
+            df = pl.read_csv(path, truncate_ragged_lines=True)
+        case ".xlsx":
+            df = pl.read_excel(path)
+        case _:
+            raise ValueError(
+                f"不支持的 debug 数据文件格式: {path.suffix or '(无扩展名)'}，"
+                "仅支持 .csv、.xlsx"
+            )
 
     responses = QuestionnaireData.from_dataframe(
         df,
         questionnaire,
-        meta_extractor=new_meta_extractor,
         q_num_extractor=new_qnum_extractor,
     )
     return list(responses)
