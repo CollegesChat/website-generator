@@ -43,9 +43,15 @@ def render_university_markdown(
     uni_q_num: int,
 ) -> str:
     lines = _build_header(name, slug, archived, responses)
-    lines.extend(
-        render_question_groups(
-            responses, questions_map, uni_q_num, format_answer_legacy
-        )
-    )
+    lines.extend(render_university_body(responses, questions_map, uni_q_num))
     return "".join(lines)
+
+
+def render_university_body(
+    responses: list[QuestionnaireResponse],
+    questions_map: Mapping,
+    uni_q_num: int,
+) -> list[str]:
+    return render_question_groups(
+        responses, questions_map, uni_q_num, format_answer_legacy
+    )
