@@ -27,13 +27,15 @@ from .parsers.legacy import meta_extractor as legacy_meta_extractor
 from .parsers.legacy import qnum_extractor as legacy_qnum_extractor
 from .parsers.new import meta_extractor as new_meta_extractor
 from .parsers.new import qnum_extractor as new_qnum_extractor
-from .province import load_province_mapping
+from .province import find_province, load_province_mapping
 from .render import (
     FileNameMap,
+    render_combined_markdown,
     render_legacy,
-    render_new,
+    sanitize_filename,
     write_markdown_for_universities,
 )
+from .render.common import generate_markdown_path
 
 
 def download_files(names: list[str], base_url: str, root: Path) -> None:
@@ -85,7 +87,18 @@ def collect_universities(
     return dict(universities), dict(universities_archived)
 
 
+def combine_university_groups(
+    *groups: dict[str, list[QuestionnaireResponse]],
+) -> dict[str, list[QuestionnaireResponse]]:
+    combined: defaultdict[str, list[QuestionnaireResponse]] = defaultdict(list)
+    for group in groups:
+        for name, responses in group.items():
+            combined[name].extend(responses)
+    return dict(combined)
+
+
 V2_YAML_PATH = Path("/mnt/data/Project/questionnaire/v2.yaml")
+V1_YAML_PATH = Path("/mnt/data/Project/questionnaire/v1.yaml")
 
 
 def load_debug_responses(
@@ -113,9 +126,21 @@ def load_debug_responses(
 
 
 if "debug" in sys.argv:
-    logger.info("Debug mode: 使用本地 v2.yaml + 随机 mock 数据")
+    logger.info("Debug mode: 使用本地 v1/v2 数据 + 随机 mock 数据")
+    with open(V1_YAML_PATH, encoding="utf-8") as f:
+        v1_questionnaire = load_questions_from_yaml(parse_yaml(f.read()))  # type: ignore
     with open(V2_YAML_PATH, encoding="utf-8") as f:
         v2_questionnaire = load_questions_from_yaml(parse_yaml(f.read()))  # type: ignore
+    v1_path = Path(__file__).resolve().parent.parent / "required" / "results_desensitized.csv"
+    v1_df = pl.read_csv(v1_path, truncate_ragged_lines=True)
+    v1_survey_data = QuestionnaireData.from_dataframe(
+        v1_df,
+        v1_questionnaire,
+        meta_extractor=legacy_meta_extractor,
+        q_num_extractor=legacy_qnum_extractor,
+    )
+    v1_active, v1_archived = collect_universities(v1_survey_data, uni_q_num=4)
+    v1_universities = combine_university_groups(v1_active, v1_archived)
     from .mock import generate_mock_v2_data
 
     mock_responses, province_mapping = generate_mock_v2_data(v2_questionnaire)
@@ -132,17 +157,35 @@ if "debug" in sys.argv:
     active, archived = collect_universities(
         [*mock_responses, *file_responses], uni_q_num=2
     )
-    logger.info(f"Mock data: {len(active)} universities")
-    filename_map = FileNameMap()
-    write_markdown_for_universities(
-        active,
-        v2_questionnaire,
-        filename_map,
-        province_mapping,
-        archived=False,
-        uni_q_num=2,
-        render_fn=render_new,
+    v2_universities = combine_university_groups(active, archived)
+    university_names = set(v1_universities) | set(v2_universities)
+    logger.info(
+        f"Debug data: {len(v1_universities)} v1 + {len(v2_universities)} v2 universities; "
+        f"{len(university_names)} total"
     )
+    logger.info("v2 universities: " + ", ".join(sorted(v2_universities)))
+    filename_map = FileNameMap()
+    for name in sorted(university_names):
+        cleaned_name = sanitize_filename(name)
+        slug = filename_map[cleaned_name]
+        province = find_province(cleaned_name, province_mapping)
+        target = generate_markdown_path(province, cleaned_name, archived=False)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        (target.parent / "_index.md").write_text(
+            data="---\nbookCollapseSection: true\n---", encoding="utf-8"
+        )
+        target.write_text(
+            render_combined_markdown(
+                cleaned_name,
+                v1_universities.get(name, []),
+                v2_universities.get(name, []),
+                v1_questionnaire,
+                v2_questionnaire,
+                slug,
+                archived=False,
+            ),
+            encoding="utf-8",
+        )
 else:
     logger.info("开始检查并同步远程资源文件...")
     download_files(
