@@ -3,7 +3,7 @@ from io import BytesIO
 import polars as pl
 import regex as re
 
-NORMAL_NAME_MATCHER = re.compile(r"^(?!.*(?:高中|初中)).*?(?:大学|学院|学校).*$")
+NORMAL_NAME_MATCHER = re.compile(r"^(?!.*(?:高中|初中|中学)).*?(?:大学?|学院|学校).*$")
 NON_CHINESE_MATCHER = re.compile(r"^(?![{\p{P}\p{Zs}\p{Han}}]+$)[\p{L}\p{P}\p{Zs}]+$")
 # use https://regex101.com/ for test.
 # 匹配：外文+中文+標點（可選）
