@@ -7,18 +7,9 @@ import polars as pl
 from wenjuanxing_parser.models import IP, BasicData
 
 
-class NewBasicData(BasicData):
-    def __repr__(self) -> str:
-        return (
-            f'{self.__class__.__name__}('
-            f'answer_date={self.answer_date!r}, '
-            f'num={self.num!r})'
-        )
-
-
-def meta_extractor(df: pl.DataFrame, idx: Any) -> NewBasicData | None:
+def meta_extractor(df: pl.DataFrame, idx: Any) -> BasicData | None:
     row = df.row(idx, named=True)
-    return NewBasicData(
+    return BasicData(
         answer_date=datetime.strptime(
             str(row['提交答卷时间']),
             '%Y/%m/%d %H:%M:%S',
