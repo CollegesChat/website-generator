@@ -1,6 +1,8 @@
 from .common import (
     FileNameMap,
     FormattedAnswer,
+    render_combined_markdown,
+    sanitize_filename,
     write_markdown_for_universities,
 )
 from .legacy import format_answer_legacy
@@ -13,7 +15,9 @@ __all__ = [
     "FormattedAnswer",
     "format_answer_legacy",
     "format_answer_new",
+    "render_combined_markdown",
     "render_legacy",
     "render_new",
+    "sanitize_filename",
     "write_markdown_for_universities",
 ]

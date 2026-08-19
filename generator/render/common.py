@@ -120,8 +120,8 @@ def render_question_groups(
             else:
                 title_escaped = re.sub(r'["\r\n]', "", escaped)
                 lines.append(
-                    f'- {{{{% details title="{title_escaped} x {count}" %}}}}\n\n'
-                )
+                    f'- {{{{< details title="{title_escaped} x {count}" >}}}}\n\n'
+                )  # UPSTREAM: https://github.com/alex-shpak/hugo-book/issues/830
                 no_detail_nums: list[str] = []
                 detail_lines: list[str] = []
                 for entry in entries:
@@ -137,7 +137,7 @@ def render_question_groups(
                     lines.append("\n  ---\n")
                 for dl in detail_lines:
                     lines.append(dl + "\n")
-                lines.append("\n  {{% /details %}}\n")
+                lines.append("\n  {{< /details >}}\n")
         lines.append("\n")
 
     return lines
@@ -179,6 +179,50 @@ def _write_one(
     content = render_fn(name, responses, questions_map, slug, archived, uni_q_num)
     target.write_text(content, encoding="utf-8")
     return name
+
+
+def render_combined_markdown(
+    name: str,
+    v1_responses: list[QuestionnaireResponse],
+    v2_responses: list[QuestionnaireResponse],
+    v1_questions: Mapping,
+    v2_questions: Mapping,
+    slug: str,
+    archived: bool,
+) -> str:
+    """debug 模式下将 v1/v2 内容合并到同一页面。"""
+    from .legacy import render_university_body as render_v1_body
+    from .legacy import render_university_markdown as render_v1
+    from .new import V2_META_Q_NUMS, _build_header_v2
+    from .new import render_university_body as render_v2_body
+    from .new import render_university_markdown as render_v2
+
+    if not v1_responses:
+        return render_v2(name, v2_responses, v2_questions, slug, archived, 2)
+    if not v2_responses:
+        return render_v1(name, v1_responses, v1_questions, slug, archived, 4)
+
+    lines = _build_header_v2(name, slug, archived, v2_responses, V2_META_Q_NUMS)
+    source_end = lines.index("\n{{% /details %}}\n\n")
+    v1_sources = [
+        f"- A{response.metadata.num} ({response.metadata.answer_date:%Y年%m月})\n"
+        for response in v1_responses
+        if response.metadata is not None
+    ]
+    lines[source_end:source_end] = v1_sources
+    lines.extend(
+        [
+            "{{< tabs >}}\n\n",
+            '{{% tab "v1" %}}\n\n',
+            *render_v1_body(v1_responses, v1_questions, 4),
+            "\n{{% /tab %}}\n\n",
+            '{{% tab "v2" %}}\n\n',
+            *render_v2_body(v2_responses, v2_questions, 2),
+            "\n{{% /tab %}}\n\n",
+            "{{< /tabs >}}\n",
+        ]
+    )
+    return "".join(lines)
 
 
 def write_markdown_for_universities(
