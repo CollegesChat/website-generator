@@ -1,7 +1,7 @@
 import random
-from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -19,22 +19,24 @@ from wenjuanxing_parser.models import (
     UserAnswer,
 )
 
+from .province import load_province_mapping
+
 SCHOOLS = [
-    ("同济大学", "上海"),
-    ("浙江大学", "浙江"),
-    ("中山大学", "广东"),
-    ("北京航空航天大学", "北京"),
-    ("南京大学", "江苏"),
-    ("武汉大学", "湖北"),
-    ("四川大学", "四川"),
-    ("哈尔滨工业大学", "黑龙江"),
-    ("西安交通大学", "陕西"),
-    ("同济大学浙江学院", "浙江"),
-    ("济南大学", "山东"),
-    ("暨南大学", "广东"),
-    ("天津大学", "天津"),
-    ("厦门大学", "福建"),
-    ("郑州大学", "河南"),
+    ("同济大学", "四平路校区"),
+    ("浙江大学", "紫金港校区"),
+    ("中山大学", "广州校区"),
+    ("北京航空航天大学", "学院路校区"),
+    ("南京大学", "鼓楼校区"),
+    ("武汉大学", "珞珈山校区"),
+    ("四川大学", "望江校区"),
+    ("哈尔滨工业大学", "哈尔滨校区"),
+    ("西安交通大学", "兴庆校区"),
+    ("同济大学浙江学院", "嘉兴校区"),
+    ("济南大学", "主校区"),
+    ("暨南大学", "石牌校区"),
+    ("天津大学", "卫津路校区"),
+    ("厦门大学", "思明校区"),
+    ("郑州大学", "主校区"),
 ]
 
 NICKNAMES = [
@@ -53,23 +55,6 @@ NICKNAMES = [
     "早睡早起",
     "夜猫子",
     "咖啡续命",
-]
-
-CAMPUSES = [
-    "主校区",
-    "南校区",
-    "新校区",
-    "松江校区",
-    "延安路校区",
-    "紫金港校区",
-    "南湖校区",
-    "江安校区",
-    "一校区",
-    "二校区",
-    "本部",
-    "东校区",
-    "西校区",
-    "北校区",
 ]
 
 MAJORS = [
@@ -183,14 +168,14 @@ def _gen_checkbox(question: CheckboxQuestion) -> UserAnswer:
 
 
 def _gen_text_area(
-    question: TextAreaQuestion, q_num: int, school_name: str
+    question: TextAreaQuestion, q_num: int, school_name: str, campus: str
 ) -> UserAnswer:
     if q_num == 1:
         return UserAnswer(value=random.choice(NICKNAMES))
     if q_num == 2:
         return UserAnswer(value=school_name)
     if q_num == 5:
-        return UserAnswer(value=random.choice(CAMPUSES))
+        return UserAnswer(value=campus)
     pool = SHORT_TEXTS if random.random() < 0.4 else LONG_TEXTS
     return UserAnswer(value=random.choice(pool))
 
@@ -222,13 +207,13 @@ def _gen_fill_blank(question: FillBlankQuestion) -> UserAnswer:
     return UserAnswer(value=blanks)
 
 
-def _gen_answer(question, q_num: int, school_name: str) -> UserAnswer:
+def _gen_answer(question, q_num: int, school_name: str, campus: str) -> UserAnswer:
     if isinstance(question, RadioQuestion):
         return _gen_radio(question)
     if isinstance(question, CheckboxQuestion):
         return _gen_checkbox(question)
     if isinstance(question, TextAreaQuestion):
-        return _gen_text_area(question, q_num, school_name)
+        return _gen_text_area(question, q_num, school_name, campus)
     if isinstance(question, FillBlankQuestion):
         return _gen_fill_blank(question)
     return UserAnswer(value=random.choice(SHORT_TEXTS))
@@ -237,29 +222,29 @@ def _gen_answer(question, q_num: int, school_name: str) -> UserAnswer:
 def generate_mock_v2_data(
     questions_map: Mapping[int, Any],
 ) -> tuple[
-    dict[str, list[QuestionnaireResponse]],
-    dict[str, list[QuestionnaireResponse]],
+    list[QuestionnaireResponse],
     list[tuple[str, str]],
 ]:
     num_schools = random.randint(5, 10)
     selected = random.sample(SCHOOLS, min(num_schools, len(SCHOOLS)))
-    province_mapping = [(name, prov) for name, prov in selected]
+    province_file = Path(__file__).resolve().parent.parent / "required" / "colleges.csv"
+    province_mapping = (
+        load_province_mapping(province_file.read_bytes()) if province_file.exists() else []
+    )
 
-    universities: defaultdict[str, list[QuestionnaireResponse]] = defaultdict(list)
+    responses: list[QuestionnaireResponse] = []
     response_num = 10001
 
-    for school_name, _province in selected:
+    for school_name, campus in selected:
         num_responses = random.randint(3, 8)
         for _ in range(num_responses):
             answers: dict[int, UserAnswer] = {}
             for q_num, question in questions_map.items():
-                answers[q_num] = _gen_answer(question, q_num, school_name)
+                answers[q_num] = _gen_answer(question, q_num, school_name, campus)
 
             metadata = _make_metadata(response_num)
             resp = QuestionnaireResponse(answers=answers, metadata=metadata)
-            universities[school_name].append(resp)
+            responses.append(resp)
             response_num += 1
 
-    active = dict(universities)
-    archived: dict[str, list[QuestionnaireResponse]] = {}
-    return active, archived, province_mapping
+    return responses, province_mapping
