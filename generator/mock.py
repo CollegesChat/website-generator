@@ -5,17 +5,16 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from wenjuanxing_parser._models.base import IP, BasicData
-from wenjuanxing_parser._models.questions import (
+from wenjuanxing_parser.constants import MISSING_BASIC_DATA_KWARGS
+from wenjuanxing_parser.models import (
+    BasicData,
     CheckboxQuestion,
     FillBlankQuestion,
-    RadioQuestion,
-    TextAreaQuestion,
-)
-from wenjuanxing_parser.models import (
     QuestionnaireResponse,
+    RadioQuestion,
     ResponseStatus,
     SelectedOption,
+    TextAreaQuestion,
     UserAnswer,
 )
 
@@ -130,10 +129,7 @@ def _make_metadata(num: int) -> BasicData:
     return BasicData(
         answer_date=_random_date(),
         num=num,
-        time_used=timedelta(seconds=random.randint(60, 600)),
-        source="debug",
-        source_detail="mock",
-        ip=IP(address="127.0.0.1", location="测试"),
+        **MISSING_BASIC_DATA_KWARGS
     )
 
 
