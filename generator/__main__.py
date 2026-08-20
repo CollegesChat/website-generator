@@ -23,9 +23,7 @@ from .config import (
     REQUIRED_DOCS,
     SITE_DIR,
 )
-from .parsers.legacy import meta_extractor as legacy_meta_extractor
-from .parsers.legacy import qnum_extractor as legacy_qnum_extractor
-from .parsers.new import qnum_extractor as new_qnum_extractor
+from .parser import legacy_meta_extractor, new_meta_extractor, qnum_extractor
 from .province import find_province, load_province_mapping
 from .render import (
     FileNameMap,
@@ -119,7 +117,8 @@ def load_debug_responses(
     responses = QuestionnaireData.from_dataframe(
         df,
         questionnaire,
-        q_num_extractor=new_qnum_extractor,
+        q_num_extractor=qnum_extractor,
+        meta_extractor=new_meta_extractor,
     )
     return list(responses)
 
@@ -136,7 +135,7 @@ if "debug" in sys.argv:
         v1_df,
         v1_questionnaire,
         meta_extractor=legacy_meta_extractor,
-        q_num_extractor=legacy_qnum_extractor,
+        q_num_extractor=qnum_extractor,
     )
     v1_active, v1_archived = collect_universities(v1_survey_data, uni_q_num=4)
     v1_universities = combine_university_groups(v1_active, v1_archived)
@@ -202,7 +201,7 @@ else:
         legacy_df,
         legacy_questionnaire,
         meta_extractor=legacy_meta_extractor,
-        q_num_extractor=legacy_qnum_extractor,
+        q_num_extractor=qnum_extractor,
     )
 
     province_mapping = load_province_mapping(niquests.get(CSV_URL).content or b"")
