@@ -146,12 +146,11 @@ def render_question_groups(
 def _build_header(
     name: str, slug: str, archived: bool, responses: list[QuestionnaireResponse]
 ) -> list[str]:
-    display_name = _to_simplified(name)
     lines: list[str] = [
         "---\n",
-        f'title: "{display_name}{" (已归档)" if archived else ""}"\n',
+        f'title: "{name}{" (已归档)" if archived else ""}"\n',
         f'slug: "{slug}"\n',
-        f"description: 来自 colleges.chat 的{display_name} 问卷调查信息\n",
+        f"description: 来自 colleges.chat 的{name} 问卷调查信息\n",
         "---\n\n",
     ]
     lines.append("> 本页面内容来源于问卷，仅供参考。\n\n")
