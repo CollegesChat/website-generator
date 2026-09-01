@@ -32,7 +32,7 @@ from .render import (
     sanitize_filename,
     write_markdown_for_universities,
 )
-from .render.common import generate_markdown_path
+from .render.common import _to_simplified, generate_markdown_path
 
 
 def download_files(names: list[str], base_url: str, root: Path) -> None:
@@ -71,6 +71,7 @@ def collect_universities(
         if uni_answer is None:
             continue
         name = NAME_PREPROCESS.sub("", str(uni_answer.value)).strip()
+        name = _to_simplified(name)
         if not name:
             continue
         if resp.metadata:
