@@ -82,6 +82,10 @@ def collect_universities(
                 universities_archived[name].append(resp)
                 continue
         universities[name].append(resp)
+    for entries in universities.values():
+        entries.reverse()
+    for entries in universities_archived.values():
+        entries.reverse()
     return dict(universities), dict(universities_archived)
 
 
@@ -92,6 +96,8 @@ def combine_university_groups(
     for group in groups:
         for name, responses in group.items():
             combined[name].extend(responses)
+    for responses in combined.values():
+        responses.reverse()
     return dict(combined)
 
 
