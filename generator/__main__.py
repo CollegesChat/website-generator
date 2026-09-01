@@ -1,6 +1,7 @@
 import sys
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Any, cast
@@ -14,7 +15,7 @@ from wenjuanxing_parser.models import QuestionnaireResponse
 from yaml12 import parse_yaml
 
 from .config import (
-    ARCHIVE_TIME,
+    ARCHIVE_YEARS,
     CSV_URL,
     DATA_URL,
     DOC_URL,
@@ -62,8 +63,10 @@ def collect_universities(
     survey_data: Iterable[QuestionnaireResponse],
     uni_q_num: int,
 ) -> tuple[dict[str, list], dict[str, list]]:
-    """遍历问卷数据，按学校名分组，并按 ARCHIVE_TIME 分为 active / archived"""
-    archive_time = ARCHIVE_TIME.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+    """遍历问卷数据，按学校名分组，最近 ARCHIVE_YEARS 年内为 active，更早为 archived"""
+    archive_time = datetime.now(ZoneInfo("Asia/Shanghai")) - timedelta(
+        days=ARCHIVE_YEARS * 365
+    )
     universities: defaultdict[str, list] = defaultdict(list)
     universities_archived: defaultdict[str, list] = defaultdict(list)
     for resp in survey_data:

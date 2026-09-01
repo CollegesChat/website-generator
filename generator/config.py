@@ -1,7 +1,6 @@
 import os
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
@@ -14,7 +13,7 @@ log_format = (
 )
 logger.add(sys.stdout, format=log_format, colorize=True)
 
-ARCHIVE_TIME = datetime.fromisoformat("2023-01-01 00:00:00")
+ARCHIVE_YEARS = 3
 ROOT = Path("required")
 SITE_DIR = Path(os.getenv("SITE_DIR", r"/mnt/data/Project/questionnaire-report-theme"))
 
