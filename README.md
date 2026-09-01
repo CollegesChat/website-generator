@@ -11,9 +11,9 @@ graph TD
     subgraph Phase2 [2. 数据读取与时间判定]
         D --> E[解析省份与高校映射表 colleges.csv]
         E --> F[逐行读取问卷结果 results_desensitized.csv]
-        F --> G{提交时间 < ARCHIVE_TIME?}
-        G -- 是 (2023年以前) --> H[加载至已归档字典<br>universities_archived]
-        G -- 否 (2023年及以后) --> I[加载至活跃字典<br>universities]
+        F --> G{提交时间在最近3年内?}
+        G -- 否 (3年前及更早) --> H[加载至已归档字典<br>universities_archived]
+        G -- 是 (最近3年内) --> I[加载至活跃字典<br>universities]
     end
 
     %% 阶段三：别名整合与黑白名单过滤
