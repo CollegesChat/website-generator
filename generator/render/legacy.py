@@ -1,7 +1,6 @@
-from collections.abc import Mapping
-
 from wenjuanxing_parser.models import (
     AnswerValue,
+    Questionnaire,
     QuestionnaireResponse,
     ResponseStatus,
     SelectedOption,
@@ -37,7 +36,7 @@ def format_answer_legacy(value: AnswerValue) -> FormattedAnswer | None:
 def render_university_markdown(
     name: str,
     responses: list[QuestionnaireResponse],
-    questions_map: Mapping,
+    questions_map: Questionnaire,
     slug: str,
     archived: bool,
     uni_q_num: int,
@@ -49,7 +48,7 @@ def render_university_markdown(
 
 def render_university_body(
     responses: list[QuestionnaireResponse],
-    questions_map: Mapping,
+    questions_map: Questionnaire,
     uni_q_num: int,
 ) -> list[str]:
     return render_question_groups(
