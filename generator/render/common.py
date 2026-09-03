@@ -103,8 +103,10 @@ def render_question_groups(
 
         if not groups:
             continue
-
-        lines.append(f"## Q: {_to_simplified(question.title)}\n\n")
+        if '还有什么要说的吗' in question.title or '自由补充' in question.title:
+            lines.append("## 自由补充\n\n")
+        else:
+            lines.append(f"## Q: {question.title}\n\n")
         for summary_text, entries in groups.items():
             count = len(entries)
             escaped = _markdown_escape(summary_text)
