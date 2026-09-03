@@ -1,7 +1,6 @@
-from collections.abc import Mapping
-
 from wenjuanxing_parser.models import (
     AnswerValue,
+    Questionnaire,
     QuestionnaireResponse,
     ResponseStatus,
     SelectedOption,
@@ -102,7 +101,7 @@ def _build_header_v2(
 def render_university_markdown(
     name: str,
     responses: list[QuestionnaireResponse],
-    questions_map: Mapping,
+    questions_map: Questionnaire,
     slug: str,
     archived: bool,
     uni_q_num: int,
@@ -121,7 +120,7 @@ def render_university_markdown(
 
 def render_university_body(
     responses: list[QuestionnaireResponse],
-    questions_map: Mapping,
+    questions_map: Questionnaire,
     uni_q_num: int,
     meta_q_nums: list[int] | None = None,
 ) -> list[str]:

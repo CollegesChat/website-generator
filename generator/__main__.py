@@ -1,17 +1,17 @@
 import sys
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 from zoneinfo import ZoneInfo
 
 import niquests
 import polars as pl
 from loguru import logger
 from wenjuanxing_parser import QuestionnaireData, load_questions_from_yaml
-from wenjuanxing_parser.models import QuestionnaireResponse
+from wenjuanxing_parser.models import Questionnaire, QuestionnaireResponse
 from yaml12 import parse_yaml
 
 from .config import (
@@ -109,7 +109,7 @@ V1_YAML_PATH = Path("/mnt/data/Project/questionnaire/v1.yaml")
 
 
 def load_debug_responses(
-    path: Path, questionnaire: Mapping[int, Any]
+    path: Path, questionnaire: Questionnaire
 ) -> list[QuestionnaireResponse]:
     """读取 debug 模式下额外提供的 CSV/XLSX 答卷。"""
     suffix = path.suffix.lower()
