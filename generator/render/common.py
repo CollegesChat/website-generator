@@ -1,7 +1,7 @@
 import os
 import re
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +9,7 @@ from typing import cast
 
 import zhconv
 from loguru import logger
-from wenjuanxing_parser.models import AnswerValue, QuestionnaireResponse
+from wenjuanxing_parser.models import AnswerValue, Questionnaire, QuestionnaireResponse
 
 from ..config import SITE_DIR
 from ..province import find_province
@@ -38,7 +38,7 @@ class _ResponseEntry:
 
 type FormatFn = Callable[[AnswerValue], FormattedAnswer | list[FormattedAnswer] | None]
 type RenderFn = Callable[
-    [str, list[QuestionnaireResponse], Mapping, str, bool, int],
+    [str, list[QuestionnaireResponse], Questionnaire, str, bool, int],
     str,
 ]
 
@@ -75,7 +75,7 @@ def generate_markdown_path(province: str, filename: str, archived: bool) -> Path
 
 def render_question_groups(
     responses: list[QuestionnaireResponse],
-    questions_map: Mapping,
+    questions_map: Questionnaire,
     uni_q_num: int,
     format_fn: FormatFn,
 ) -> list[str]:
@@ -168,7 +168,7 @@ def _build_header(
 def _write_one(
     name: str,
     responses: list[QuestionnaireResponse],
-    questions_map: Mapping,
+    questions_map: Questionnaire,
     slug: str,
     target: Path,
     archived: bool,
@@ -184,8 +184,8 @@ def render_combined_markdown(
     name: str,
     v1_responses: list[QuestionnaireResponse],
     v2_responses: list[QuestionnaireResponse],
-    v1_questions: Mapping,
-    v2_questions: Mapping,
+    v1_questions: Questionnaire,
+    v2_questions: Questionnaire,
     slug: str,
     archived: bool,
 ) -> str:
@@ -226,7 +226,7 @@ def render_combined_markdown(
 
 def write_markdown_for_universities(
     universities: dict[str, list[QuestionnaireResponse]],
-    questions_map: Mapping,
+    questions_map: Questionnaire,
     filename_map: FileNameMap,
     province_mapping: list[tuple[str, str]],
     archived: bool,

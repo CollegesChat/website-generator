@@ -1,8 +1,6 @@
 import random
-from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
 from zoneinfo import ZoneInfo
 
 from wenjuanxing_parser.constants import MISSING_BASIC_DATA_KWARGS
@@ -10,6 +8,7 @@ from wenjuanxing_parser.models import (
     BasicData,
     CheckboxQuestion,
     FillBlankQuestion,
+    Questionnaire,
     QuestionnaireResponse,
     RadioQuestion,
     ResponseStatus,
@@ -216,7 +215,7 @@ def _gen_answer(question, q_num: int, school_name: str, campus: str) -> UserAnsw
 
 
 def generate_mock_v2_data(
-    questions_map: Mapping[int, Any],
+    questions_map: Questionnaire,
 ) -> tuple[
     list[QuestionnaireResponse],
     list[tuple[str, str]],
