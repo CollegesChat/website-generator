@@ -66,6 +66,11 @@ def _markdown_escape(text: str) -> str:
 # 考虑替换为HTML实体标签
 
 
+def _indent_multiline(text: str, indent: str = "\t") -> str:
+    """把多行文本的换行替换为换行+缩进，避免换行导致 markdown 列表项被截断。"""
+    return text.replace("\n", "\n" + indent)
+
+
 def generate_markdown_path(province: str, filename: str, archived: bool) -> Path:
     base = SITE_DIR / "content" / "docs"
     if archived:
@@ -115,10 +120,13 @@ def render_question_groups(
                 entry = entries[0]
                 if entry.detail:
                     lines.append(
-                        f"- A{entry.num}: {escaped}: {_markdown_escape(entry.detail)}\n"
+                        f"- A{entry.num}: {escaped}: "
+                        f"{_indent_multiline(_markdown_escape(entry.detail))}\n"
                     )
                 else:
-                    lines.append(f"- A{entry.num}: {escaped}\n")
+                    lines.append(
+                        f"- A{entry.num}: {_indent_multiline(escaped)}\n"
+                    )
             else:
                 title_escaped = re.sub(r'["\r\n]', "", escaped)
                 lines.append(
@@ -129,7 +137,8 @@ def render_question_groups(
                 for entry in entries:
                     if entry.detail:
                         detail_lines.append(
-                            f"  - A{entry.num}: {_markdown_escape(entry.detail)}"
+                            f"  - A{entry.num}: "
+                            f"{_indent_multiline(_markdown_escape(entry.detail), '    ')}"
                         )
                     else:
                         no_detail_nums.append(f"A{entry.num}")
