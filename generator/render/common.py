@@ -106,8 +106,10 @@ def render_question_groups(
 
         if not groups:
             continue
-        if '还有什么要说的吗' in question.title or '自由补充' in question.title:
-            lines.append("## 自由补充\n\n")
+        if '还有什么要说的吗' in question.title:
+            lines.append("## 自由补充 {#自由补充-v1}\n\n")
+        elif '自由补充' in question.title:
+            lines.append("## 自由补充 {#自由补充-v2}\n\n")
         else:
             lines.append(f"## Q: {question.title}\n\n")
         for summary_text, entries in groups.items():
