@@ -11,7 +11,7 @@ import zhconv
 from loguru import logger
 from wenjuanxing_parser.models import AnswerValue, Questionnaire, QuestionnaireResponse
 
-from ..config import SITE_DIR
+from ..config import MARKDOWN_ESCAPE_RE, SITE_DIR
 from ..province import find_province
 from ..slug import FileNameMap
 
@@ -61,9 +61,7 @@ def sanitize_filename(filename: str) -> str:
 
 
 def _markdown_escape(text: str) -> str:
-    return text.replace("*", "\\*").replace("~", "\\~").replace("_", "\\_")
-# FIXME: 考虑替换HTML标签 + 更多
-# 考虑替换为HTML实体标签
+    return MARKDOWN_ESCAPE_RE.sub(r'\\\1', text)
 
 
 def _indent_multiline(text: str, indent: str = "\t") -> str:
