@@ -1,15 +1,23 @@
 import os
 import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import cast
+from zoneinfo import ZoneInfo
 
 import zhconv
 from loguru import logger
-from wenjuanxing_parser.models import AnswerValue, Questionnaire, QuestionnaireResponse
+from wenjuanxing_parser.models import (
+    AnswerValue,
+    Questionnaire,
+    QuestionnaireResponse,
+    ResponseStatus,
+    SelectedOption,
+)
 
 from ..config import MARKDOWN_ESCAPE_RE, SITE_DIR
 from ..province import find_province
@@ -24,6 +32,19 @@ def _to_simplified(text: str) -> str:
     return zhconv.convert(text, "zh-cn")
 
 
+_EPOCH = datetime.min.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+
+
+def _answer_time(resp: QuestionnaireResponse) -> datetime:
+    """答卷时间，统一成带时区后再比较（v1 元数据是 naive，v2 是 Asia/Shanghai）。"""
+    if resp.metadata is None:
+        return _EPOCH
+    answer_date = resp.metadata.answer_date
+    if answer_date.tzinfo is None:
+        return answer_date.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+    return answer_date
+
+
 @dataclass(frozen=True)
 class FormattedAnswer:
     summary: str
@@ -34,6 +55,17 @@ class FormattedAnswer:
 class _ResponseEntry:
     num: int
     detail: str | None = None
+
+
+@dataclass(frozen=True)
+class HeaderSource:
+    """页面头部里来自某份问卷的一批答卷来源。
+
+    meta_q_nums 为空表示只列出「编号 + 年月」（v1 答卷没有可展示的附加信息）。
+    """
+
+    responses: list[QuestionnaireResponse]
+    meta_q_nums: Sequence[int] = ()
 
 
 type FormatFn = Callable[[AnswerValue], FormattedAnswer | list[FormattedAnswer] | None]
@@ -154,9 +186,28 @@ def render_question_groups(
     return lines
 
 
+def _format_meta_value(value: AnswerValue) -> str:
+    if value is None or isinstance(value, ResponseStatus):
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, SelectedOption):
+        return value.text
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, SelectedOption):
+                parts.append(item.text)
+            elif isinstance(item, str) and item.strip():
+                parts.append(item)
+        return ", ".join(parts)
+    return str(value)
+
+
 def _build_header(
-    name: str, slug: str, archived: bool, responses: list[QuestionnaireResponse]
+    name: str, slug: str, archived: bool, sources: Sequence[HeaderSource]
 ) -> list[str]:
+    """页面头部。多份来源（v1/v2）的答卷会按时间统一倒序交错列出。"""
     lines: list[str] = [
         "---\n",
         f'title: "{name}{" (已归档)" if archived else ""}"\n',
@@ -167,8 +218,32 @@ def _build_header(
     lines.append("> 本页面内容来源于问卷，仅供参考。\n\n")
     lines.append("> 数据来源：\n\n")
     lines.append('{{% details title="展开" %}}\n\n')
-    for resp in responses:
-        if resp.metadata:
+    ordered = sorted(
+        (
+            (resp, source.meta_q_nums)
+            for source in sources
+            for resp in source.responses
+        ),
+        key=lambda pair: _answer_time(pair[0]),
+        reverse=True,
+    )
+    for resp, meta_q_nums in ordered:
+        if resp.metadata is None:
+            continue
+        meta_parts: list[str] = []
+        for q_num in meta_q_nums:
+            answer = resp.answers.get(q_num)
+            if answer is not None:
+                text = _format_meta_value(answer.value)
+                if text:
+                    meta_parts.append(text)
+        meta_str = ", ".join(meta_parts)
+        if meta_str:
+            lines.append(
+                f"- A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月}): "
+                f"{_markdown_escape(meta_str)}\n"
+            )
+        else:
             lines.append(
                 f"- A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月})\n"
             )
@@ -196,37 +271,46 @@ def render_combined_markdown(
     v1_responses: list[QuestionnaireResponse],
     v2_responses: list[QuestionnaireResponse],
     v1_questions: Questionnaire,
-    v2_questions: Questionnaire,
+    v2_questions: Questionnaire | None,
     slug: str,
     archived: bool,
 ) -> str:
-    """debug 模式下将 v1/v2 内容合并到同一页面。"""
+    """将同一所学校的 v1/v2 答卷合并渲染到同一页面（用 tabs 分开）。
+
+    只有一份问卷数据时直接走对应的单版本渲染。
+    """
     from .legacy import render_university_body as render_v1_body
     from .legacy import render_university_markdown as render_v1
-    from .new import V2_META_Q_NUMS, _build_header_v2
+    from .new import V2_META_Q_NUMS
     from .new import render_university_body as render_v2_body
     from .new import render_university_markdown as render_v2
 
-    if not v1_responses:
-        return render_v2(name, v2_responses, v2_questions, slug, archived, 2)
+    if v2_responses and v2_questions is None:
+        logger.warning(
+            f"{name}: 缺少 v2 问卷定义，忽略 {len(v2_responses)} 份 v2 答卷"
+        )
+        v2_responses = []
     if not v2_responses:
         return render_v1(name, v1_responses, v1_questions, slug, archived, 4)
+    if not v1_responses:
+        return render_v2(name, v2_responses, v2_questions, slug, archived, 2)
 
-    lines = _build_header_v2(name, slug, archived, v2_responses, V2_META_Q_NUMS)
-    source_end = lines.index("\n{{% /details %}}\n\n")
-    v1_sources = [
-        f"- A{response.metadata.num} ({response.metadata.answer_date:%Y年%m月})\n"
-        for response in v1_responses
-        if response.metadata is not None
-    ]
-    lines[source_end:source_end] = v1_sources
+    lines = _build_header(
+        name,
+        slug,
+        archived,
+        [
+            HeaderSource(v2_responses, V2_META_Q_NUMS),
+            HeaderSource(v1_responses),
+        ],
+    )
     lines.extend(
         [
             "{{< tabs >}}\n\n",
-            '{{% tab "v1" %}}\n\n',
+            f'{{% tab "v1 ({len(v1_responses)} 份)" %}}\n\n',
             *render_v1_body(v1_responses, v1_questions, 4),
             "\n{{% /tab %}}\n\n",
-            '{{% tab "v2" %}}\n\n',
+            f'{{% tab "v2 ({len(v2_responses)} 份)" %}}\n\n',
             *render_v2_body(v2_responses, v2_questions, 2),
             "\n{{% /tab %}}\n\n",
             "{{< /tabs >}}\n",

@@ -6,7 +6,12 @@ from wenjuanxing_parser.models import (
     SelectedOption,
 )
 
-from .common import FormattedAnswer, _build_header, render_question_groups
+from .common import (
+    FormattedAnswer,
+    HeaderSource,
+    _build_header,
+    render_question_groups,
+)
 
 
 def format_answer_legacy(value: AnswerValue) -> FormattedAnswer | None:
@@ -41,7 +46,7 @@ def render_university_markdown(
     archived: bool,
     uni_q_num: int,
 ) -> str:
-    lines = _build_header(name, slug, archived, responses)
+    lines = _build_header(name, slug, archived, [HeaderSource(responses)])
     lines.extend(render_university_body(responses, questions_map, uni_q_num))
     return "".join(lines)
 
