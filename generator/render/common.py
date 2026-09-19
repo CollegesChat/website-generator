@@ -285,11 +285,12 @@ def render_combined_markdown(
     from .new import render_university_body as render_v2_body
     from .new import render_university_markdown as render_v2
 
-    if v2_responses and v2_questions is None:
-        logger.warning(
-            f"{name}: 缺少 v2 问卷定义，忽略 {len(v2_responses)} 份 v2 答卷"
-        )
-        v2_responses = []
+    if v2_questions is None:
+        if v2_responses:
+            logger.warning(
+                f"{name}: 缺少 v2 问卷定义，忽略 {len(v2_responses)} 份 v2 答卷"
+            )
+        return render_v1(name, v1_responses, v1_questions, slug, archived, 4)
     if not v2_responses:
         return render_v1(name, v1_responses, v1_questions, slug, archived, 4)
     if not v1_responses:

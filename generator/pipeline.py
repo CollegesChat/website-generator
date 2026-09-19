@@ -1,7 +1,7 @@
 """问卷数据 -> Hugo markdown 的生成管线，debug 与生产构建共用。"""
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -175,15 +175,22 @@ def load_questionnaire(source: Path | str) -> Questionnaire | None:
             if r.status_code != 200:
                 logger.warning(f"问卷下载失败（HTTP {r.status_code}）: {source}")
                 return None
+            if r.text is None:
+                logger.warning(f"问卷内容为空: {source}")
+                return None
             text = r.text
-        return load_questions_from_yaml(parse_yaml(text))  # type: ignore[no-any-return]
+        raw = parse_yaml(text)
+        if not isinstance(raw, (list, dict)):
+            logger.warning(f"问卷格式异常（顶层应为 list 或 dict）: {source}")
+            return None
+        return load_questions_from_yaml(raw)
     except Exception as e:  # noqa: BLE001
         logger.warning(f"问卷加载失败，已跳过: {source} {e!r}")
         return None
 
 
 def load_remote_survey_data(
-    url: str, questionnaire: Questionnaire, meta_extractor: object
+    url: str, questionnaire: Questionnaire, meta_extractor: Callable
 ) -> list[QuestionnaireResponse] | None:
     """拉取远程答卷 CSV，不存在或解析失败时返回 None。"""
     try:
@@ -199,7 +206,7 @@ def load_remote_survey_data(
         data = QuestionnaireData.from_dataframe(
             df,
             questionnaire,
-            meta_extractor=meta_extractor,  # type: ignore[arg-type]
+            meta_extractor=meta_extractor,
             q_num_extractor=qnum_extractor,
         )
         return list(data)
