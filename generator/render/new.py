@@ -8,7 +8,8 @@ from wenjuanxing_parser.models import (
 
 from .common import (
     FormattedAnswer,
-    _markdown_escape,
+    HeaderSource,
+    _build_header,
     render_question_groups,
 )
 
@@ -39,65 +40,6 @@ def format_answer_new(
     return FormattedAnswer(summary=str(value))
 
 
-def _format_meta_value(value: AnswerValue) -> str:
-    if value is None or isinstance(value, ResponseStatus):
-        return ""
-    if isinstance(value, str):
-        return value.strip()
-    if isinstance(value, SelectedOption):
-        return value.text
-    if isinstance(value, list):
-        parts: list[str] = []
-        for item in value:
-            if isinstance(item, SelectedOption):
-                parts.append(item.text)
-            elif isinstance(item, str) and item.strip():
-                parts.append(item)
-        return ", ".join(parts)
-    return str(value)
-
-
-def _build_header_v2(
-    name: str,
-    slug: str,
-    archived: bool,
-    responses: list[QuestionnaireResponse],
-    meta_q_nums: list[int],
-) -> list[str]:
-    lines: list[str] = [
-        "---\n",
-        f'title: "{name}{" (已归档)" if archived else ""}"\n',
-        f'slug: "{slug}"\n',
-        f"description: 来自 colleges.chat 的{name} 问卷调查信息\n",
-        "---\n\n",
-    ]
-    lines.append("> 本页面内容来源于问卷，仅供参考。\n\n")
-    lines.append("> 数据来源：\n\n")
-    lines.append('{{% details title="展开" %}}\n\n')
-    for resp in responses:
-        if resp.metadata is None:
-            continue
-        meta_parts: list[str] = []
-        for q_num in meta_q_nums:
-            answer = resp.answers.get(q_num)
-            if answer is not None:
-                text = _format_meta_value(answer.value)
-                if text:
-                    meta_parts.append(text)
-        meta_str = ", ".join(meta_parts)
-        if meta_str:
-            lines.append(
-                f"- A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月}): "
-                f"{_markdown_escape(meta_str)}\n"
-            )
-        else:
-            lines.append(
-                f"- A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月})\n"
-            )
-    lines.append("\n{{% /details %}}\n\n")
-    return lines
-
-
 def render_university_markdown(
     name: str,
     responses: list[QuestionnaireResponse],
@@ -109,7 +51,9 @@ def render_university_markdown(
 ) -> str:
     if meta_q_nums is None:
         meta_q_nums = V2_META_Q_NUMS
-    lines = _build_header_v2(name, slug, archived, responses, meta_q_nums)
+    lines = _build_header(
+        name, slug, archived, [HeaderSource(responses, meta_q_nums)]
+    )
     lines.extend(
         render_university_body(
             responses, questions_map, uni_q_num, meta_q_nums
