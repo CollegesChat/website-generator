@@ -19,7 +19,7 @@ from wenjuanxing_parser.models import (
     SelectedOption,
 )
 
-from ..config import MARKDOWN_ESCAPE_RE, SITE_DIR
+from ..config import IMPORTED_NUM_FROM, MARKDOWN_ESCAPE_RE, SITE_DIR
 from ..province import find_province
 from ..slug import FileNameMap
 
@@ -101,6 +101,13 @@ def _indent_multiline(text: str, indent: str = "\t") -> str:
     return text.replace("\n", "\n" + indent)
 
 
+def _answer_label(num: int) -> str:
+    """答卷编号：人工导入批次用 M 前缀并从 1 重新计数，问卷星导出的沿用 A + 原序号。"""
+    if num >= IMPORTED_NUM_FROM:
+        return f"M{num - IMPORTED_NUM_FROM + 1}"
+    return f"A{num}"
+
+
 def generate_markdown_path(province: str, filename: str, archived: bool) -> Path:
     base = SITE_DIR / "content" / "docs"
     if archived:
@@ -152,12 +159,12 @@ def render_question_groups(
                 entry = entries[0]
                 if entry.detail:
                     lines.append(
-                        f"- A{entry.num}: {escaped}: "
+                        f"- {_answer_label(entry.num)}: {escaped}: "
                         f"{_indent_multiline(_markdown_escape(entry.detail))}\n"
                     )
                 else:
                     lines.append(
-                        f"- A{entry.num}: {_indent_multiline(escaped)}\n"
+                        f"- {_answer_label(entry.num)}: {_indent_multiline(escaped)}\n"
                     )
             else:
                 title_escaped = re.sub(r'["\r\n]', "", escaped)
@@ -169,12 +176,13 @@ def render_question_groups(
                 detail_lines: list[str] = []
                 for entry in entries:
                     if entry.detail:
+                        escaped_detail = _markdown_escape(entry.detail)
                         detail_lines.append(
-                            f"  - A{entry.num}: "
-                            f"{_indent_multiline(_markdown_escape(entry.detail), '    ')}"
+                            f"  - {_answer_label(entry.num)}: "
+                            f"{_indent_multiline(escaped_detail, '    ')}"
                         )
                     else:
-                        no_detail_nums.append(f"A{entry.num}")
+                        no_detail_nums.append(_answer_label(entry.num))
                 if no_detail_nums:
                     lines.append("  " + " ".join(no_detail_nums) + "\n")
                 if no_detail_nums and detail_lines:
@@ -239,14 +247,15 @@ def _build_header(
                 if text:
                     meta_parts.append(text)
         meta_str = ", ".join(meta_parts)
+        num_label = _answer_label(resp.metadata.num)
         if meta_str:
             lines.append(
-                f"- A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月}): "
+                f"- {num_label} ({resp.metadata.answer_date:%Y年%m月}): "
                 f"{_markdown_escape(meta_str)}\n"
             )
         else:
             lines.append(
-                f"- A{resp.metadata.num} ({resp.metadata.answer_date:%Y年%m月})\n"
+                f"- {num_label} ({resp.metadata.answer_date:%Y年%m月})\n"
             )
     lines.append("\n{{% /details %}}\n\n")
     return lines

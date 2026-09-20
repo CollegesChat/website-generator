@@ -14,6 +14,9 @@ log_format = (
 logger.add(sys.stdout, format=log_format, colorize=True)
 
 ARCHIVE_YEARS = 3
+# 序号 >= 此值的答卷是人工导入批次（非问卷星导出），渲染时用 M 前缀区分。
+# 必须写成 int（100_000_000），写成 1e8 会是 float，编号会变成 M2.0
+IMPORTED_NUM_FROM = 100_000_000
 ROOT = Path("required")
 SITE_DIR = Path(os.getenv("SITE_DIR", r"/mnt/data/Project/questionnaire-report-theme"))
 
