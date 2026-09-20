@@ -14,6 +14,7 @@ from .config import (
     QUESTIONNAIRES_URL,
     REQUIRED_DOCS,
     SITE_DIR,
+    V1_ADDITIONS_URL,
 )
 from .parser import legacy_meta_extractor, new_meta_extractor
 from .pipeline import (
@@ -64,6 +65,14 @@ else:
     )
     if v1_survey_data is None:
         raise SystemExit("v1 答卷数据加载失败，终止构建")
+
+    # 人工导入批次不在 v1.csv 里，单独一份；拿不到（尚未上传 / 404）就跳过
+    imported = load_remote_survey_data(
+        V1_ADDITIONS_URL, v1_questionnaire, legacy_meta_extractor
+    )
+    if imported:
+        logger.info(f"合并人工导入批次 {len(imported)} 条")
+        v1_survey_data = [*v1_survey_data, *imported]
 
     province_mapping = load_province_mapping(niquests.get(CSV_URL).content or b"")
 
