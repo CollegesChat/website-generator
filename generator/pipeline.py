@@ -11,7 +11,12 @@ import niquests
 import polars as pl
 from loguru import logger
 from wenjuanxing_parser import QuestionnaireData, load_questions_from_yaml
-from wenjuanxing_parser.models import Questionnaire, QuestionnaireResponse
+from wenjuanxing_parser.models import (
+    Questionnaire,
+    QuestionnaireResponse,
+    ResponseStatus,
+    UserAnswer,
+)
 from yaml12 import parse_yaml
 
 from .config import ARCHIVE_YEARS, NAME_PREPROCESS
@@ -22,6 +27,35 @@ from .render.common import _answer_time, _to_simplified, generate_markdown_path
 
 V1_UNI_Q_NUM = 4
 V2_UNI_Q_NUM = 2
+V2_LEVEL_Q_NUM = 4  # 你的培养层次是？
+NON_GRAD_LEVELS = frozenset({"本科", "大专"})
+V2_GRAD_Q_NUMS = (7, 8, 9, 10)  # 导师/工位/补助/异地联培，仅研究生适用
+
+
+def strip_graduate_answers(
+    responses: Iterable[QuestionnaireResponse],
+) -> tuple[list[QuestionnaireResponse], int]:
+    """培养层次为本科/大专却答了研究生题（问卷星跳题失效）时，把那些答案置为 SKIPPED。
+
+    只作废题目答案，整份答卷保留；渲染层对 SKIPPED 与留空一视同仁。
+    """
+    result: list[QuestionnaireResponse] = []
+    removed = 0
+    for resp in responses:
+        level = resp.answers.get(V2_LEVEL_Q_NUM)
+        text = getattr(level.value, "text", None) if level is not None else None
+        if text not in NON_GRAD_LEVELS:
+            result.append(resp)
+            continue
+        answers = dict(resp.answers)
+        for q_num in V2_GRAD_Q_NUMS:
+            answer = answers.get(q_num)
+            if answer is None or answer.value is ResponseStatus.SKIPPED:
+                continue
+            answers[q_num] = UserAnswer(value=ResponseStatus.SKIPPED)
+            removed += 1
+        result.append(QuestionnaireResponse(answers=answers, metadata=resp.metadata))
+    return result, removed
 
 
 def collect_universities(
@@ -131,6 +165,11 @@ def build_university_pages(
 
     split_archived=False 时 active 与 archived 合并进同一个页面（debug 预览用）。
     """
+    v2_survey_data, removed = strip_graduate_answers(v2_survey_data)
+    if removed:
+        logger.warning(
+            f"本科/大专答卷中作废研究生题目答案 {removed} 条（Q{V2_GRAD_Q_NUMS}）"
+        )
     v1_active, v1_archived = collect_universities(v1_survey_data, V1_UNI_Q_NUM)
     v2_active, v2_archived = collect_universities(v2_survey_data, V2_UNI_Q_NUM)
     logger.info(
