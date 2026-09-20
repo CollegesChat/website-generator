@@ -1,9 +1,8 @@
+from ..slug import FileNameMap
 from .common import (
-    FileNameMap,
     FormattedAnswer,
     render_combined_markdown,
     sanitize_filename,
-    write_markdown_for_universities,
 )
 from .legacy import format_answer_legacy
 from .legacy import render_university_markdown as render_legacy
@@ -19,5 +18,4 @@ __all__ = [
     "render_legacy",
     "render_new",
     "sanitize_filename",
-    "write_markdown_for_universities",
 ]

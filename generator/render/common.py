@@ -1,8 +1,5 @@
-import os
 import re
-import sys
 from collections.abc import Callable, Sequence
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -20,12 +17,6 @@ from wenjuanxing_parser.models import (
 )
 
 from ..config import IMPORTED_NUM_FROM, MARKDOWN_ESCAPE_RE, SITE_DIR
-from ..province import find_province
-from ..slug import FileNameMap
-
-
-def _is_ci() -> bool:
-    return not sys.stdout.isatty() or bool(os.environ.get("CI"))
 
 
 def _to_simplified(text: str) -> str:
@@ -69,10 +60,6 @@ class HeaderSource:
 
 
 type FormatFn = Callable[[AnswerValue], FormattedAnswer | list[FormattedAnswer] | None]
-type RenderFn = Callable[
-    [str, list[QuestionnaireResponse], Questionnaire, str, bool, int],
-    str,
-]
 
 
 def sanitize_filename(filename: str) -> str:
@@ -261,21 +248,6 @@ def _build_header(
     return lines
 
 
-def _write_one(
-    name: str,
-    responses: list[QuestionnaireResponse],
-    questions_map: Questionnaire,
-    slug: str,
-    target: Path,
-    archived: bool,
-    uni_q_num: int,
-    render_fn: RenderFn,
-) -> str:
-    content = render_fn(name, responses, questions_map, slug, archived, uni_q_num)
-    target.write_text(content, encoding="utf-8")
-    return name
-
-
 def render_combined_markdown(
     name: str,
     v1_responses: list[QuestionnaireResponse],
@@ -332,95 +304,3 @@ def render_combined_markdown(
         ]
     )
     return "".join(lines)
-
-
-def write_markdown_for_universities(
-    universities: dict[str, list[QuestionnaireResponse]],
-    questions_map: Questionnaire,
-    filename_map: FileNameMap,
-    province_mapping: list[tuple[str, str]],
-    archived: bool,
-    uni_q_num: int,
-    render_fn: RenderFn,
-) -> None:
-    # 在 task 元组中加入 province
-    tasks: list[tuple[str, list[QuestionnaireResponse], str, Path, str]] = []
-    for name, responses in universities.items():
-        cleaned_name = sanitize_filename(name)
-        slug = filename_map[cleaned_name]
-        province = find_province(cleaned_name, province_mapping)
-
-        target = generate_markdown_path(province, cleaned_name, archived)
-        tasks.append((cleaned_name, responses, slug, target, province))
-
-    written_dirs: set[Path] = set()
-    for _, _, _, target, province in tasks:
-        parent = target.parent
-        if parent not in written_dirs:
-            parent.mkdir(parents=True, exist_ok=True)
-            weight_str = "\nweight: 10" if province in ["国外", "不予收录"] else ""
-            (parent / "_index.md").write_text(
-                data=f"---\nbookCollapseSection: true{weight_str}\n---",
-                encoding="utf-8",
-            )
-            written_dirs.add(parent)
-
-    max_workers = os.cpu_count() or 1
-    section = "archived" if archived else "active"
-    total = len(tasks)
-    logger.info(f"Start generating {section} markdown files: {total}")
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(
-                _write_one,
-                name,
-                responses,
-                questions_map,
-                slug,
-                target,
-                archived,
-                uni_q_num,
-                render_fn,
-            ): name
-            for name, responses, slug, target, _ in tasks
-        }
-        completed = 0
-        if _is_ci():
-            bar_width = 30
-            for future in as_completed(futures):
-                name = futures[future]
-                try:
-                    future.result()
-                except OSError as e:
-                    logger.exception(f"Failed to render {name}, {e!r}")
-                completed += 1
-                filled = int(bar_width * completed / total) if total else bar_width
-                bar = "=" * filled + ">" + " " * (bar_width - filled)
-                sys.stdout.write(f"\r[{section}] [{bar}] {completed}/{total}")
-                sys.stdout.flush()
-            sys.stdout.write("\n")
-        else:
-            from rich.progress import (
-                BarColumn,
-                Progress,
-                TaskProgressColumn,
-                TextColumn,
-                TimeRemainingColumn,
-            )
-
-            with Progress(
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-                TimeRemainingColumn(),
-            ) as progress:
-                task_id = progress.add_task(f"[cyan]{section}", total=total)
-                for future in as_completed(futures):
-                    name = futures[future]
-                    try:
-                        future.result()
-                    except OSError as e:
-                        logger.exception(f"Failed to render {name}, {e!r}")
-                    completed += 1
-                    progress.update(task_id, completed=completed)
-    logger.info("Finished generating markdown files.")
