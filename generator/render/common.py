@@ -161,8 +161,9 @@ def render_question_groups(
                     )
             else:
                 title_escaped = re.sub(r'["\r\n]', "", escaped)
+                details_title = f"{title_escaped} x {count}"
                 lines.append(
-                    f'- {{{{< details title="{title_escaped} x {count}" >}}}}\n\n'
+                    '- {{< details title="' + details_title + '" >}}\n\n'
                 )  # UPSTREAM: https://github.com/alex-shpak/hugo-book/issues/830
                 no_detail_nums: list[str] = []
                 detail_lines: list[str] = []
@@ -305,13 +306,17 @@ def render_combined_markdown(
             HeaderSource(v1_responses),
         ],
     )
+    v1_label = f"v1 ({len(v1_responses)} 份)"
+    v2_label = f"v2 ({len(v2_responses)} 份)"
     lines.extend(
         [
             "{{< tabs >}}\n\n",
-            f'{{% tab "v1 ({len(v1_responses)} 份)" %}}\n\n',
+            # shortcode 保持字面量，只把变量拼进去：
+            # f-string 会折叠 {{，% 格式化又要把 % 写成 %%，两头都不划算
+            '{{% tab "' + v1_label + '" %}}\n\n',
             *render_v1_body(v1_responses, v1_questions, 4),
             "\n{{% /tab %}}\n\n",
-            f'{{% tab "v2 ({len(v2_responses)} 份)" %}}\n\n',
+            '{{% tab "' + v2_label + '" %}}\n\n',
             *render_v2_body(v2_responses, v2_questions, 2),
             "\n{{% /tab %}}\n\n",
             "{{< /tabs >}}\n",
