@@ -27,35 +27,59 @@ from .render.common import _answer_time, _to_simplified, generate_markdown_path
 
 V1_UNI_Q_NUM = 4
 V2_UNI_Q_NUM = 2
-V2_LEVEL_Q_NUM = 4  # 你的培养层次是？
-NON_GRAD_LEVELS = frozenset({"本科", "大专"})
-V2_GRAD_Q_NUMS = (7, 8, 9, 10)  # 导师/工位/补助/异地联培，仅研究生适用
-
-
-def strip_graduate_answers(
+def apply_answer_patches(
     responses: Iterable[QuestionnaireResponse],
+    patch_source: Path | str,
 ) -> tuple[list[QuestionnaireResponse], int]:
-    """培养层次为本科/大专却答了研究生题（问卷星跳题失效）时，把那些答案置为 SKIPPED。
+    """按 patch yaml 声明的（序号, 题号）整题作废答案，返回新列表与替换条数。
 
-    只作废题目答案，整份答卷保留；渲染层对 SKIPPED 与留空一视同仁。
+    配置读取失败时保持原样，宁可漏清也不要中断整站构建。
     """
-    result: list[QuestionnaireResponse] = []
-    removed = 0
-    for resp in responses:
-        level = resp.answers.get(V2_LEVEL_Q_NUM)
-        text = getattr(level.value, "text", None) if level is not None else None
-        if text not in NON_GRAD_LEVELS:
-            result.append(resp)
+    statuses = {"empty": ResponseStatus.EMPTY, "skipped": ResponseStatus.SKIPPED}
+    raw: object = None
+    try:
+        if isinstance(patch_source, Path):
+            text: str | None = patch_source.read_text(encoding="utf-8")
+        else:
+            r = niquests.get(patch_source)
+            text = r.text if r.status_code == 200 else None
+            if text is None:
+                logger.warning(f"patch 配置不可用（HTTP {r.status_code}）: {patch_source}")
+        raw = parse_yaml(text) if text else None
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"patch 配置加载失败，已跳过: {patch_source} {e!r}")
+    if not isinstance(raw, list):
+        if raw is not None:
+            logger.warning(f"patch 配置格式异常（顶层应为 list）: {patch_source}")
+        return list(responses), 0
+
+    result = list(responses)
+    index = {r.metadata.num: i for i, r in enumerate(result) if r.metadata}
+    replaced = 0
+    for rule in raw:
+        if not isinstance(rule, dict):
             continue
-        answers = dict(resp.answers)
-        for q_num in V2_GRAD_Q_NUMS:
-            answer = answers.get(q_num)
-            if answer is None or answer.value is ResponseStatus.SKIPPED:
-                continue
-            answers[q_num] = UserAnswer(value=ResponseStatus.SKIPPED)
-            removed += 1
-        result.append(QuestionnaireResponse(answers=answers, metadata=resp.metadata))
-    return result, removed
+        status = statuses.get(str(rule.get("status", "empty")).lower())
+        if status is None:
+            logger.warning(f"未知 status，按 empty 处理: {rule.get('status')!r}")
+            status = ResponseStatus.EMPTY
+        questions = rule.get("questions") or []
+        nums = set(rule.get("nums") or [])
+        for num in sorted(nums - index.keys()):
+            logger.warning(f"patch 指定的序号不在当前数据中: {num}")
+        for num in nums & index.keys():
+            resp = result[index[num]]
+            answers = dict(resp.answers)
+            for q_num in questions:
+                answer = answers.get(q_num)
+                if answer is None or answer.value is status:
+                    continue
+                answers[q_num] = UserAnswer(value=status)
+                replaced += 1
+            result[index[num]] = QuestionnaireResponse(
+                answers=answers, metadata=resp.metadata
+            )
+    return result, replaced
 
 
 def collect_universities(
@@ -165,11 +189,6 @@ def build_university_pages(
 
     split_archived=False 时 active 与 archived 合并进同一个页面（debug 预览用）。
     """
-    v2_survey_data, removed = strip_graduate_answers(v2_survey_data)
-    if removed:
-        logger.warning(
-            f"本科/大专答卷中作废研究生题目答案 {removed} 条（Q{V2_GRAD_Q_NUMS}）"
-        )
     v1_active, v1_archived = collect_universities(v1_survey_data, V1_UNI_Q_NUM)
     v2_active, v2_archived = collect_universities(v2_survey_data, V2_UNI_Q_NUM)
     logger.info(

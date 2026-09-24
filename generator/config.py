@@ -33,6 +33,8 @@ DATA_URL = [
 ]
 # 人工导入批次（腾讯文档等）单独一份，拿不到就跳过，不影响主流程
 V1_ADDITIONS_URL = BASE_URL + "datas/v1.additions.csv"
+# 脏数据补丁（问卷缺陷/跳题失效），按序号×题号整题作废
+PATCHES_URL = BASE_URL + "datas/v2.patches.yaml"
 QUESTIONNAIRES_URL = [
     "https://github.com/CollegesChat/questionnaire/raw/refs/heads/main/v1.yaml",
     "https://github.com/CollegesChat/questionnaire/raw/refs/heads/main/v2.yaml",
