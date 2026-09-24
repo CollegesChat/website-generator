@@ -20,6 +20,7 @@ from ._mock import generate_mock_v2_data
 from .parser import legacy_meta_extractor, new_meta_extractor, qnum_extractor
 from .pipeline import (
     V2_UNI_Q_NUM,
+    apply_answer_patches,
     build_university_pages,
     collect_universities,
     load_questionnaire,
@@ -27,6 +28,7 @@ from .pipeline import (
 
 V1_YAML_PATH = Path("/mnt/data/Project/questionnaire/v1.yaml")
 V2_YAML_PATH = Path("/mnt/data/Project/questionnaire/v2.yaml")
+V2_PATCH_PATH = Path("/mnt/data/Project/university-information/datas/v2.patches.yaml")
 V1_DATA_PATH = (
     Path(__file__).resolve().parent.parent / "required" / "results_desensitized.csv"
 )
@@ -87,6 +89,10 @@ def run_debug() -> None:
         logger.info(f"Loaded {len(file_responses)} responses from {debug_path}")
 
     v2_responses = [*mock_responses, *file_responses]
+    v2_responses, patched = apply_answer_patches(v2_responses, V2_PATCH_PATH)
+    if patched:
+        logger.info(f"按 patch 配置作废 {patched} 条答案")
+
     v2_active, v2_archived = collect_universities(v2_responses, V2_UNI_Q_NUM)
     logger.info(
         "v2 universities: " + ", ".join(sorted(set(v2_active) | set(v2_archived)))

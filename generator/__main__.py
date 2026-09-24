@@ -11,6 +11,7 @@ from .config import (
     CSV_URL,
     DATA_URL,
     DOC_URL,
+    PATCHES_URL,
     QUESTIONNAIRES_URL,
     REQUIRED_DOCS,
     SITE_DIR,
@@ -18,6 +19,7 @@ from .config import (
 )
 from .parser import legacy_meta_extractor, new_meta_extractor
 from .pipeline import (
+    apply_answer_patches,
     build_university_pages,
     load_questionnaire,
     load_remote_survey_data,
@@ -85,6 +87,10 @@ else:
     )
     if v2_survey_data is None:
         logger.warning("v2 数据不可用，本次仅生成 v1 内容")
+    else:
+        v2_survey_data, patched = apply_answer_patches(v2_survey_data, PATCHES_URL)
+        if patched:
+            logger.info(f"按 patch 配置作废 {patched} 条答案")
 
     build_university_pages(
         v1_survey_data,
