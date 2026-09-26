@@ -210,3 +210,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local scratch notes (removed from tracking 2026-09-26)
+TODO.md
