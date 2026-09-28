@@ -125,11 +125,7 @@ def _random_date(start_year: int = 2024, end_year: int = 2026) -> datetime:
 
 
 def _make_metadata(num: int) -> BasicData:
-    return BasicData(
-        answer_date=_random_date(),
-        num=num,
-        **MISSING_BASIC_DATA_KWARGS
-    )
+    return BasicData(answer_date=_random_date(), num=num, **MISSING_BASIC_DATA_KWARGS)
 
 
 def _has_additional(option) -> bool:
@@ -224,7 +220,9 @@ def generate_mock_v2_data(
     selected = random.sample(SCHOOLS, min(num_schools, len(SCHOOLS)))
     province_file = Path(__file__).resolve().parent.parent / "required" / "colleges.csv"
     province_mapping = (
-        load_province_mapping(province_file.read_bytes()) if province_file.exists() else []
+        load_province_mapping(province_file.read_bytes())
+        if province_file.exists()
+        else []
     )
 
     responses: list[QuestionnaireResponse] = []

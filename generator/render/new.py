@@ -51,13 +51,9 @@ def render_university_markdown(
 ) -> str:
     if meta_q_nums is None:
         meta_q_nums = V2_META_Q_NUMS
-    lines = _build_header(
-        name, slug, archived, [HeaderSource(responses, meta_q_nums)]
-    )
+    lines = _build_header(name, slug, archived, [HeaderSource(responses, meta_q_nums)])
     lines.extend(
-        render_university_body(
-            responses, questions_map, uni_q_num, meta_q_nums
-        )
+        render_university_body(responses, questions_map, uni_q_num, meta_q_nums)
     )
     return "".join(lines)
 

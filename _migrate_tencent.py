@@ -15,6 +15,7 @@ import argparse
 import math
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import polars as pl
 
@@ -46,7 +47,9 @@ V1_COLUMNS = (
     ]
 )
 
-EXCEL_EPOCH = datetime(1899, 12, 30)
+SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+
+EXCEL_EPOCH = datetime(1899, 12, 30, tzinfo=SHANGHAI_TZ)
 # xlsx 里只填了时间的格子会被存成这一天的某个时刻，输出时要剥掉日期部分。
 # 整列若被推断成 String，它会以 "1899-12-31 11:30:00" 这种文本形式出现
 EXCEL_DATE_ZERO = date(1899, 12, 31)
@@ -117,7 +120,7 @@ def _looks_like_number(value: object) -> bool:
     return True
 
 
-def restore_number(value: int | float) -> tuple[str, str]:
+def restore_number(value: float) -> tuple[str, str]:
     """还原被 Excel 转成序列号的数字，第二个返回值是存疑原因（无则空串）。
 
     0 < v < 1 是当天的时间（如 0.479 -> 11:30），v >= 40000 是日期，
@@ -170,7 +173,9 @@ def to_answer_time(value: object) -> tuple[str | None, str]:
     text = str(value)
     for fmt in TIME_FORMATS:
         try:
-            return datetime.strptime(text, fmt).strftime("%Y-%m-%d %H:%M:%S"), ""
+            return datetime.strptime(text, fmt).replace(tzinfo=SHANGHAI_TZ).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ), ""
         except ValueError:
             continue
     return text, f"提交时间无法解析: {text!r}"
