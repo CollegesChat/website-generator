@@ -28,7 +28,7 @@ from .pipeline import (
 
 V1_YAML_PATH = Path("/mnt/data/Project/questionnaire/v1.yaml")
 V2_YAML_PATH = Path("/mnt/data/Project/questionnaire/v2.yaml")
-V2_PATCH_PATH = Path("/mnt/data/Project/university-information/datas/v2.patches.yaml")
+V2_PATCH_PATH = Path("/mnt/data/Project/university-information/data/v2.patches.yaml")
 V1_DATA_PATH = (
     Path(__file__).resolve().parent.parent / "required" / "results_desensitized.csv"
 )
