@@ -23,7 +23,9 @@ def count_rows(path: Path) -> int:
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("xlsx", type=Path, help="问卷星导出的 xlsx")
-parser.add_argument("-o", "--output", type=Path, help="输出 csv，默认写到当前目录同名 .csv")
+parser.add_argument(
+    "-o", "--output", type=Path, help="输出 csv，默认写到当前目录同名 .csv"
+)
 args = parser.parse_args()
 
 df = pl.read_excel(args.xlsx).drop(*DROP_COLS, strict=False)

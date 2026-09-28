@@ -80,7 +80,7 @@ def sanitize_filename(filename: str) -> str:
 
 
 def _markdown_escape(text: str) -> str:
-    return MARKDOWN_ESCAPE_RE.sub(r'\\\1', text)
+    return MARKDOWN_ESCAPE_RE.sub(r"\\\1", text)
 
 
 def _indent_multiline(text: str, indent: str = "\t") -> str:
@@ -132,9 +132,9 @@ def render_question_groups(
 
         if not groups:
             continue
-        if '还有什么要说的吗' in question.title:
+        if "还有什么要说的吗" in question.title:
             lines.append("## 自由补充 {#自由补充-v1}\n\n")
-        elif '自由补充' in question.title:
+        elif "自由补充" in question.title:
             lines.append("## 自由补充 {#自由补充-v2}\n\n")
         else:
             lines.append(f"## Q: {question.title}\n\n")
@@ -215,11 +215,7 @@ def _build_header(
     lines.append("> 数据来源：\n\n")
     lines.append('{{% details title="展开" %}}\n\n')
     ordered = sorted(
-        (
-            (resp, source.meta_q_nums)
-            for source in sources
-            for resp in source.responses
-        ),
+        ((resp, source.meta_q_nums) for source in sources for resp in source.responses),
         key=lambda pair: _answer_time(pair[0]),
         reverse=True,
     )
@@ -241,9 +237,7 @@ def _build_header(
                 f"{_markdown_escape(meta_str)}\n"
             )
         else:
-            lines.append(
-                f"- {num_label} ({resp.metadata.answer_date:%Y年%m月})\n"
-            )
+            lines.append(f"- {num_label} ({resp.metadata.answer_date:%Y年%m月})\n")
     lines.append("\n{{% /details %}}\n\n")
     return lines
 
