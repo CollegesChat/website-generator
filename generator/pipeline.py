@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
+from typing import cast
 from zoneinfo import ZoneInfo
 
 import niquests
@@ -15,6 +16,7 @@ from wenjuanxing_parser.models import (
     Questionnaire,
     QuestionnaireResponse,
     ResponseStatus,
+    SelectedOption,
     UserAnswer,
 )
 from yaml12 import parse_yaml
@@ -27,11 +29,17 @@ from .render.common import _answer_time, _to_simplified, generate_markdown_path
 
 V1_UNI_Q_NUM = 4
 V2_UNI_Q_NUM = 2
+
+
 def apply_answer_patches(
     responses: Iterable[QuestionnaireResponse],
     patch_source: Path | str,
 ) -> tuple[list[QuestionnaireResponse], int]:
-    """按 patch yaml 声明的（序号, 题号）整题作废答案，返回新列表与替换条数。
+    """按 patch yaml 声明的规则处理答案，返回新列表与替换条数。
+
+    支持两种 type：
+      - void: 按（序号, 题号）整题作废（置 empty/skipped）
+      - replace_option_text: 替换用户选中的选项文本（不含附加文本）
 
     配置读取失败时保持原样，宁可漏清也不要中断整站构建。
     """
@@ -44,7 +52,9 @@ def apply_answer_patches(
             r = niquests.get(patch_source)
             text = r.text if r.status_code == 200 else None
             if text is None:
-                logger.warning(f"patch 配置不可用（HTTP {r.status_code}）: {patch_source}")
+                logger.warning(
+                    f"patch 配置不可用（HTTP {r.status_code}）: {patch_source}"
+                )
         raw = parse_yaml(text) if text else None
     except Exception as e:  # noqa: BLE001
         logger.warning(f"patch 配置加载失败，已跳过: {patch_source} {e!r}")
@@ -59,26 +69,80 @@ def apply_answer_patches(
     for rule in raw:
         if not isinstance(rule, dict):
             continue
-        status = statuses.get(str(rule.get("status", "empty")).lower())
-        if status is None:
-            logger.warning(f"未知 status，按 empty 处理: {rule.get('status')!r}")
-            status = ResponseStatus.EMPTY
-        questions = rule.get("questions") or []
-        nums = set(rule.get("nums") or [])
+        rule_type = str(rule.get("type", "void")).lower()
+        questions = cast(list[int], rule.get("questions") or [])
+        nums_raw = rule.get("nums")
+        nums: set[int] = set(cast(Iterable[int], nums_raw) if nums_raw else [])
+
         for num in sorted(nums - index.keys()):
             logger.warning(f"patch 指定的序号不在当前数据中: {num}")
-        for num in nums & index.keys():
-            resp = result[index[num]]
-            answers = dict(resp.answers)
-            for q_num in questions:
-                answer = answers.get(q_num)
-                if answer is None or answer.value is status:
-                    continue
-                answers[q_num] = UserAnswer(value=status)
-                replaced += 1
-            result[index[num]] = QuestionnaireResponse(
-                answers=answers, metadata=resp.metadata
-            )
+
+        if rule_type == "void":
+            status = statuses.get(str(rule.get("status", "empty")).lower())
+            if status is None:
+                logger.warning(f"未知 status，按 empty 处理: {rule.get('status')!r}")
+                status = ResponseStatus.EMPTY
+            for num in nums & index.keys():
+                resp = result[index[num]]
+                answers = dict(resp.answers)
+                for q_num in questions:
+                    answer = answers.get(q_num)
+                    if answer is None or answer.value is status:
+                        continue
+                    answers[q_num] = UserAnswer(value=status)
+                    replaced += 1
+                result[index[num]] = QuestionnaireResponse(
+                    answers=answers, metadata=resp.metadata
+                )
+
+        elif rule_type == "replace_option_text":
+            from_text = cast(str, rule.get("from"))
+            to_text = cast(str, rule.get("to"))
+            for num in nums & index.keys():
+                resp = result[index[num]]
+                answers = dict(resp.answers)
+                for q_num in questions:
+                    answer = answers.get(q_num)
+                    if answer is None:
+                        continue
+                    val = answer.value
+                    new_val = None
+                    if isinstance(val, SelectedOption):
+                        if val.text == from_text:
+                            new_val = SelectedOption(
+                                text=to_text, additional_text=val.additional_text
+                            )
+                    elif isinstance(val, list):
+                        new_list = []
+                        changed = False
+                        for item in val:
+                            if (
+                                isinstance(item, SelectedOption)
+                                and item.text == from_text
+                            ):
+                                new_list.append(
+                                    SelectedOption(
+                                        text=to_text,
+                                        additional_text=item.additional_text,
+                                    )
+                                )
+                                changed = True
+                            else:
+                                new_list.append(item)
+                        if changed:
+                            new_val = new_list
+                    if new_val is not None:
+                        answers[q_num] = UserAnswer(
+                            value=new_val,
+                            valid=answer.valid,
+                            error_msg=answer.error_msg,
+                        )
+                        replaced += 1
+                result[index[num]] = QuestionnaireResponse(
+                    answers=answers, metadata=resp.metadata
+                )
+        else:
+            logger.warning(f"未知 patch type，已跳过: {rule_type!r}")
     return result, replaced
 
 
