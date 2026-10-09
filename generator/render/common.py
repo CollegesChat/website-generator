@@ -138,6 +138,8 @@ def render_question_groups(
             lines.append("## 自由补充 {#自由补充-v2}\n\n")
         else:
             lines.append(f"## Q: {question.title}\n\n")
+        if question.prompt:
+            lines.append(f'<small>{question.prompt}</small>\n\n')
         for summary_text, entries in groups.items():
             count = len(entries)
             escaped = _markdown_escape(summary_text)
