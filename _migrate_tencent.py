@@ -38,7 +38,9 @@ V1_COLUMNS = (
     + [
         "开始时间",
         "提交时间",
-        "答题时长",
+        # 改名自 v1 弃用的「答题时长」列：腾讯导入批次的入学时间落在这里，
+        # 主 v1.csv 仍保留原「答题时长」列名，互不影响（两份数据各自独立解析）。
+        "入学时间",
         "IP省份",
         "IP城市",
         "IP地址",
@@ -246,7 +248,15 @@ def build_rows(rows: list[list], start_id: int) -> tuple[list[dict], list[str]]:
             review.append(f"源行 {row[COL_ID]}: {why}")
         record["开始时间"] = time_value
 
-        # 源 Q5「入学时间」在 v1 无对应题，统一丢弃（不逐条进复核清单）
+        # 源 Q5「入学时间」：写入改名自弃用列的「入学时间」列，
+        # 渲染器按答题序号伺机读取，不扰动 v1 的 Q1-Q30 编号与问卷定义
+        enroll, why = to_cell(row[COL_ENROLL])
+        if why:
+            review.append(
+                f"源行 {row[COL_ID]}: Q5入学时间 = {row[COL_ENROLL]!r} -> "
+                f"{enroll!r}（{why}）"
+            )
+        record["入学时间"] = enroll
         result.append(record)
     return result, review
 
@@ -283,7 +293,7 @@ emails = sum(1 for r in rows if r[COL_Q2])
 enroll = sum(1 for r in rows if r[COL_ENROLL])
 last_id = args.start_id + len(rows) - 1
 print(f"已写入 {out}：本次 {df.height} 行，答题序号 {args.start_id}-{last_id}")
-print(f"脱敏邮箱 {emails} 条，丢弃入学时间 {enroll} 条")
+print(f"脱敏邮箱 {emails} 条，写入入学时间（改名自弃用列）{enroll} 条")
 if skipped:
     preview = "、".join(s[:20] for s in skipped[:5])
     print(f"跳过非数据行 {len(skipped)} 行：{preview}")

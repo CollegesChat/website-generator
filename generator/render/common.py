@@ -59,10 +59,12 @@ class HeaderSource:
     """页面头部里来自某份问卷的一批答卷来源。
 
     meta_q_nums 为空表示只列出「编号 + 年月」（v1 答卷没有可展示的附加信息）。
+    enroll_by_num 是「答题序号 -> 入学时间」映射，为空表示本批次无入学时间。
     """
 
     responses: list[QuestionnaireResponse]
     meta_q_nums: Sequence[int] = ()
+    enroll_by_num: dict[int, str] | None = None
 
 
 type FormatFn = Callable[[AnswerValue], FormattedAnswer | list[FormattedAnswer] | None]
@@ -223,14 +225,21 @@ def _build_header(
     lines.append("> 数据来源：\n\n")
     lines.append('{{% details title="展开" %}}\n\n')  # See `UPSTREAM:`
     ordered = sorted(
-        ((resp, source.meta_q_nums) for source in sources for resp in source.responses),
-        key=lambda pair: _answer_time(pair[0]),
+        (
+            (resp, source.meta_q_nums, source.enroll_by_num)
+            for source in sources
+            for resp in source.responses
+        ),
+        key=lambda t: _answer_time(t[0]),
         reverse=True,
     )
-    for resp, meta_q_nums in ordered:
+    for resp, meta_q_nums, enroll_by_num in ordered:
         if resp.metadata is None:
             continue
         meta_parts: list[str] = []
+        if enroll_by_num and resp.metadata.num in enroll_by_num:
+            # 源列是纯年份（如 2021年），补「入学」才不被误读成答卷日期的一部分
+            meta_parts.append(f"{enroll_by_num[resp.metadata.num]}入学")
         for q_num in meta_q_nums:
             answer = resp.answers.get(q_num)
             if answer is not None:
@@ -262,10 +271,12 @@ def render_combined_markdown(
     v2_questions: Questionnaire | None,
     slug: str,
     archived: bool,
+    v1_enroll: dict[int, str] | None = None,
 ) -> str:
     """将同一所学校的 v1/v2 答卷合并渲染到同一页面（用 tabs 分开）。
 
-    只有一份问卷数据时直接走对应的单版本渲染。
+    只有一份问卷数据时直接走对应的单版本渲染。v1_enroll 是
+    「答题序号 -> 入学时间」映射（仅 v1 腾讯导入批次有），渲染器按序号伺机读取，缺失即不显示。
     """
     from .legacy import render_university_body as render_v1_body
     from .legacy import render_university_markdown as render_v1
@@ -278,9 +289,9 @@ def render_combined_markdown(
             logger.warning(
                 f"{name}: 缺少 v2 问卷定义，忽略 {len(v2_responses)} 份 v2 答卷"
             )
-        return render_v1(name, v1_responses, v1_questions, slug, archived, 4)
+        return render_v1(name, v1_responses, v1_questions, slug, archived, 4, v1_enroll)
     if not v2_responses:
-        return render_v1(name, v1_responses, v1_questions, slug, archived, 4)
+        return render_v1(name, v1_responses, v1_questions, slug, archived, 4, v1_enroll)
     if not v1_responses:
         return render_v2(name, v2_responses, v2_questions, slug, archived, 2)
 
@@ -290,7 +301,7 @@ def render_combined_markdown(
         archived,
         [
             HeaderSource(v2_responses, V2_META_Q_NUMS),
-            HeaderSource(v1_responses),
+            HeaderSource(v1_responses, (), v1_enroll),
         ],
     )
     v1_label = f"v1 ({len(v1_responses)} 份)"

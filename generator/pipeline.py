@@ -199,6 +199,7 @@ def write_combined_universities(
     v2_questionnaire: Questionnaire | None,
     province_mapping: list[tuple[str, str]],
     archived: bool,
+    v1_enroll: dict[int, str] | None = None,
 ) -> None:
     """按学校名把 v1/v2 答卷合并渲染到同一个 md 文件。
 
@@ -235,6 +236,7 @@ def write_combined_universities(
                 v2_questionnaire,
                 slug,
                 archived,
+                v1_enroll,
             ),
             encoding="utf-8",
         )
@@ -248,10 +250,12 @@ def build_university_pages(
     v2_questionnaire: Questionnaire | None,
     province_mapping: list[tuple[str, str]],
     split_archived: bool = True,
+    v1_enroll: dict[int, str] | None = None,
 ) -> None:
     """把 v1/v2 答卷分组后写盘。
 
     split_archived=False 时 active 与 archived 合并进同一个页面（debug 预览用）。
+    v1_enroll 是「答题序号 -> 入学时间」映射（仅 v1 腾讯导入批次有），渲染器按序号伺机读取。
     """
     v1_active, v1_archived = collect_universities(v1_survey_data, V1_UNI_Q_NUM)
     v2_active, v2_archived = collect_universities(v2_survey_data, V2_UNI_Q_NUM)
@@ -267,6 +271,7 @@ def build_university_pages(
             v2_questionnaire,
             province_mapping,
             archived=False,
+            v1_enroll=v1_enroll,
         )
         return
     write_combined_universities(
@@ -276,6 +281,7 @@ def build_university_pages(
         v2_questionnaire,
         province_mapping,
         archived=False,
+        v1_enroll=v1_enroll,
     )
     write_combined_universities(
         v1_archived,
@@ -284,6 +290,7 @@ def build_university_pages(
         v2_questionnaire,
         province_mapping,
         archived=True,
+        v1_enroll=v1_enroll,
     )
 
 
@@ -311,10 +318,29 @@ def load_questionnaire(source: Path | str) -> Questionnaire | None:
         return None
 
 
+def _collect_enroll(df: pl.DataFrame) -> dict[int, str]:
+    """从原始表抽出「入学时间」列（改名自 v1 弃用列），按答题序号建索引。
+
+    主 v1.csv 没有此列时返回空表，渲染器便不会显示；腾讯导入批次才有。
+    """
+    if "入学时间" not in df.columns or "答题序号" not in df.columns:
+        return {}
+    nums = df["答题序号"].to_list()
+    vals = df["入学时间"].to_list()
+    return {
+        int(n): str(v).strip()
+        for n, v in zip(nums, vals)
+        if v is not None and str(v).strip()
+    }
+
+
 def load_remote_survey_data(
     url: str, questionnaire: Questionnaire, meta_extractor: Callable
-) -> list[QuestionnaireResponse] | None:
-    """拉取远程答卷 CSV，不存在或解析失败时返回 None。"""
+) -> tuple[list[QuestionnaireResponse], dict[int, str]] | None:
+    """拉取远程答卷 CSV，不存在或解析失败时返回 None。
+
+    返回 (答卷列表, 入学时间映射)；入学时间映射为空表表示该批次无此列。
+    """
     try:
         r = niquests.get(url)
         if r.status_code != 200:
@@ -331,7 +357,7 @@ def load_remote_survey_data(
             meta_extractor=meta_extractor,
             q_num_extractor=qnum_extractor,
         )
-        return list(data)
+        return list(data), _collect_enroll(df)
     except Exception as e:  # noqa: BLE001
         logger.warning(f"答卷解析失败，已跳过: {url} {e!r}")
         return None

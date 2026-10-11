@@ -45,8 +45,11 @@ def render_university_markdown(
     slug: str,
     archived: bool,
     uni_q_num: int,
+    enroll_by_num: dict[int, str] | None = None,
 ) -> str:
-    lines = _build_header(name, slug, archived, [HeaderSource(responses)])
+    lines = _build_header(
+        name, slug, archived, [HeaderSource(responses, enroll_by_num=enroll_by_num)]
+    )
     lines.extend(render_university_body(responses, questions_map, uni_q_num))
     return "".join(lines)
 

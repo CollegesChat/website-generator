@@ -62,32 +62,37 @@ else:
     v1_questionnaire = load_questionnaire(QUESTIONNAIRES_URL[0])
     if v1_questionnaire is None:
         raise SystemExit("v1 问卷加载失败，终止构建")
-    v1_survey_data = load_remote_survey_data(
+    v1_result = load_remote_survey_data(
         DATA_URL[0], v1_questionnaire, legacy_meta_extractor
     )
-    if v1_survey_data is None:
+    if v1_result is None:
         raise SystemExit("v1 答卷数据加载失败，终止构建")
+    v1_survey_data, v1_enroll = v1_result
 
     # 人工导入批次不在 v1.csv 里，单独一份；拿不到（尚未上传 / 404）就跳过
-    imported = load_remote_survey_data(
+    imported_result = load_remote_survey_data(
         V1_ADDITIONS_URL, v1_questionnaire, legacy_meta_extractor
     )
-    if imported:
+    if imported_result:
+        imported, imported_enroll = imported_result
         logger.info(f"合并人工导入批次 {len(imported)} 条")
         v1_survey_data = [*v1_survey_data, *imported]
+        v1_enroll = {**v1_enroll, **imported_enroll}
 
     province_mapping = load_province_mapping(niquests.get(CSV_URL).content or b"")
 
     # v2 问卷/答卷可能尚未上线，拿不到就只生成 v1，不影响整站构建
     v2_questionnaire = load_questionnaire(QUESTIONNAIRES_URL[1])
-    v2_survey_data = (
+    v2_result = (
         load_remote_survey_data(DATA_URL[1], v2_questionnaire, new_meta_extractor)
         if v2_questionnaire is not None
         else None
     )
-    if v2_survey_data is None:
+    if v2_result is None:
         logger.warning("v2 数据不可用，本次仅生成 v1 内容")
+        v2_survey_data = []
     else:
+        v2_survey_data, _ = v2_result
         v2_survey_data, patched = apply_answer_patches(v2_survey_data, PATCHES_URL)
         if patched:
             logger.info(f"按 patch 配置作废 {patched} 条答案")
@@ -98,4 +103,5 @@ else:
         v1_questionnaire,
         v2_questionnaire,
         province_mapping,
+        v1_enroll=v1_enroll,
     )
