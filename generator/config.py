@@ -44,7 +44,8 @@ REQUIRED_DOCS = [
     "如何正义劝退？.md",
     "影响生活质量的一些方面.md",
 ]
-
+ANONYMOUS = '匿名受访者'
+NICKNAME_NUM = 1
 (SITE_DIR / "content" / "docs" / "universities").mkdir(parents=True, exist_ok=True)
 (SITE_DIR / "content" / "docs" / "archived" / "universities").mkdir(
     parents=True, exist_ok=True

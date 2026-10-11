@@ -16,7 +16,13 @@ from wenjuanxing_parser.models import (
     SelectedOption,
 )
 
-from ..config import IMPORTED_NUM_FROM, MARKDOWN_ESCAPE_RE, SITE_DIR
+from ..config import (
+    ANONYMOUS,
+    IMPORTED_NUM_FROM,
+    MARKDOWN_ESCAPE_RE,
+    NICKNAME_NUM,
+    SITE_DIR,
+)
 
 
 def _to_simplified(text: str) -> str:
@@ -137,7 +143,7 @@ def render_question_groups(
         elif "自由补充" in question.title:
             lines.append("## 自由补充 {#自由补充-v2}\n\n")
         else:
-            lines.append(f"## Q: {question.title}\n\n")
+            lines.append(f"## Q: {question.title}\n")
         if question.prompt:
             lines.append(f'<small>{question.prompt}</small>\n\n')
         for summary_text, entries in groups.items():
@@ -215,7 +221,7 @@ def _build_header(
     ]
     lines.append("> 本页面内容来源于问卷，仅供参考。\n\n")
     lines.append("> 数据来源：\n\n")
-    lines.append('{{% details title="展开" %}}\n\n')
+    lines.append('{{% details title="展开" %}}\n\n')  # See `UPSTREAM:`
     ordered = sorted(
         ((resp, source.meta_q_nums) for source in sources for resp in source.responses),
         key=lambda pair: _answer_time(pair[0]),
@@ -231,12 +237,16 @@ def _build_header(
                 text = _format_meta_value(answer.value)
                 if text:
                     meta_parts.append(text)
+        nickname = _format_meta_value(resp.answers[NICKNAME_NUM].value)
         meta_str = ", ".join(meta_parts)
+        is_v2_version = nickname not in ('1', '2')
+        if nickname != ANONYMOUS and is_v2_version:
+            meta_str += ('{{< nickname ",' + _markdown_escape(nickname) + '" >}}')
         num_label = _answer_label(resp.metadata.num)
         if meta_str:
             lines.append(
                 f"- {num_label} ({resp.metadata.answer_date:%Y年%m月}): "
-                f"{_markdown_escape(meta_str)}\n"
+                f"{meta_str}\n"
             )
         else:
             lines.append(f"- {num_label} ({resp.metadata.answer_date:%Y年%m月})\n")
