@@ -39,7 +39,9 @@ def apply_answer_patches(
 
     支持两种 type：
       - void: 按（序号, 题号）整题作废（置 empty/skipped）
-      - replace_option_text: 替换用户选中的选项文本（不含附加文本）
+      - reclassify_option: 把整题答案改判为指定选项；
+        additional_text 覆写附加文本；keep_additional_text 保留受访者原文
+        （仅单选/单选形态）；两者都不写则丢弃附加文本
 
     配置读取失败时保持原样，宁可漏清也不要中断整站构建。
     """
@@ -95,9 +97,10 @@ def apply_answer_patches(
                     answers=answers, metadata=resp.metadata
                 )
 
-        elif rule_type == "replace_option_text":
-            from_text = cast(str, rule.get("from"))
-            to_text = cast(str, rule.get("to"))
+        elif rule_type == "reclassify_option":
+            option = cast(str, rule.get("option"))
+            additional = cast("str | None", rule.get("additional_text"))
+            keep_text = bool(rule.get("keep_additional_text"))
             for num in nums & index.keys():
                 resp = result[index[num]]
                 answers = dict(resp.answers)
@@ -106,38 +109,24 @@ def apply_answer_patches(
                     if answer is None:
                         continue
                     val = answer.value
-                    new_val = None
-                    if isinstance(val, SelectedOption):
-                        if val.text == from_text:
-                            new_val = SelectedOption(
-                                text=to_text, additional_text=val.additional_text
-                            )
-                    elif isinstance(val, list):
-                        new_list = []
-                        changed = False
-                        for item in val:
-                            if (
-                                isinstance(item, SelectedOption)
-                                and item.text == from_text
-                            ):
-                                new_list.append(
-                                    SelectedOption(
-                                        text=to_text,
-                                        additional_text=item.additional_text,
-                                    )
-                                )
-                                changed = True
-                            else:
-                                new_list.append(item)
-                        if changed:
-                            new_val = new_list
-                    if new_val is not None:
-                        answers[q_num] = UserAnswer(
-                            value=new_val,
-                            valid=answer.valid,
-                            error_msg=answer.error_msg,
-                        )
-                        replaced += 1
+                    new_text = additional
+                    if new_text is None and keep_text:
+                        if isinstance(val, SelectedOption):
+                            new_text = val.additional_text
+                        elif (
+                            isinstance(val, list)
+                            and len(val) == 1
+                            and isinstance(val[0], SelectedOption)
+                        ):
+                            new_text = val[0].additional_text
+                    answers[q_num] = UserAnswer(
+                        value=SelectedOption(
+                            text=option, additional_text=new_text or None
+                        ),
+                        valid=answer.valid,
+                        error_msg=answer.error_msg,
+                    )
+                    replaced += 1
                 result[index[num]] = QuestionnaireResponse(
                     answers=answers, metadata=resp.metadata
                 )

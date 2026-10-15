@@ -91,7 +91,7 @@ def run_debug() -> None:
     v2_responses = [*mock_responses, *file_responses]
     v2_responses, patched = apply_answer_patches(v2_responses, V2_PATCH_PATH)
     if patched:
-        logger.info(f"按 patch 配置作废 {patched} 条答案")
+        logger.info(f"按 patch 配置处理 {patched} 处答案")
 
     v2_active, v2_archived = collect_universities(v2_responses, V2_UNI_Q_NUM)
     logger.info(

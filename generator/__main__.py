@@ -95,7 +95,7 @@ else:
         v2_survey_data, _ = v2_result
         v2_survey_data, patched = apply_answer_patches(v2_survey_data, PATCHES_URL)
         if patched:
-            logger.info(f"按 patch 配置作废 {patched} 条答案")
+            logger.info(f"按 patch 配置处理 {patched} 处答案")
 
     build_university_pages(
         v1_survey_data,
