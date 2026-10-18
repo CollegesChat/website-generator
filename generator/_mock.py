@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from wenjuanxing_parser.constants import MISSING_BASIC_DATA_KWARGS
 from wenjuanxing_parser.models import (
+    AnyQuestion,
     BasicData,
     CheckboxQuestion,
     FillBlankQuestion,
@@ -179,7 +180,7 @@ def _gen_fill_blank(question: FillBlankQuestion) -> UserAnswer:
         elif i == 2:
             blanks.append(random.choice(MAJORS))
         elif i == 3:
-            if random.random() < 0.2:
+            if random.random() < .2:
                 default = question.default_blank_text
                 if isinstance(default, dict) and i in default:
                     blanks.append(default[i])
@@ -198,7 +199,9 @@ def _gen_fill_blank(question: FillBlankQuestion) -> UserAnswer:
     return UserAnswer(value=blanks)
 
 
-def _gen_answer(question, q_num: int, school_name: str, campus: str) -> UserAnswer:
+def _gen_answer(question: AnyQuestion, q_num: int, school_name: str, campus: str) -> UserAnswer:
+    if not question.required and random.random() > .5:
+        return UserAnswer(value=ResponseStatus.EMPTY)
     if isinstance(question, RadioQuestion):
         return _gen_radio(question)
     if isinstance(question, CheckboxQuestion):
@@ -207,7 +210,6 @@ def _gen_answer(question, q_num: int, school_name: str, campus: str) -> UserAnsw
         return _gen_text_area(question, q_num, school_name, campus)
     if isinstance(question, FillBlankQuestion):
         return _gen_fill_blank(question)
-    return UserAnswer(value=random.choice(SHORT_TEXTS))
 
 
 def generate_mock_v2_data(
