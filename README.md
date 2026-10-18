@@ -1,45 +1,46 @@
 ```mermaid
 graph TD
-    %% 阶段一：环境初始化与文件下载
+    %% 阶段一：目录初始化与文档同步
     subgraph Phase1 [1. 初始化与下载阶段]
-        A([脚本启动]) --> B[建立必要的本地目录结构]
-        B --> C[下载远程资源文件<br>colleges.csv, results_desensitized.csv等]
-        C --> D[下载文档及首页 index.md<br>并重命名为 Hugo 格式的 _index.md]
+        A([脚本启动]) --> B[建立 content/docs 下universities、archived、choose-a-college 目录]
+        B --> C[下载缺失的远程文档<br>出国受阻.md 等到 choose-a-college]
     end
 
-    %% 阶段二：数据读取与初次归类
-    subgraph Phase2 [2. 数据读取与时间判定]
-        D --> E[解析省份与高校映射表 colleges.csv]
-        E --> F[逐行读取问卷结果 results_desensitized.csv]
-        F --> G{提交时间在最近3年内?}
-        G -- 否 (3年前及更早) --> H[加载至已归档字典<br>universities_archived]
-        G -- 是 (最近3年内) --> I[加载至活跃字典<br>universities]
+    %% 阶段二：加载问卷定义与答卷数据
+    subgraph Phase2 [2. 问卷与数据加载]
+        C --> D[加载 v1 问卷定义 v1.yaml<br>失败则终止构建]
+        D --> E[加载 v1 答卷 v1.csv<br>失败则终止构建]
+        E --> F[追加人工导入批次 v1.additions.csv<br>拿不到就跳过]
+        F --> G[加载省份高校映射<br>china-university-list output.csv]
+        G --> H[加载 v2 问卷 v2.yaml 与答卷 v2.csv<br>拿不到则本次仅生成 v1]
+        H --> I[按 v2.patches.yaml 处理脏数据]
     end
 
-    %% 阶段三：别名整合与黑白名单过滤
-    subgraph Phase3 [3. 数据清洗与关联]
-        H & I --> J{是否开启 Debug 模式?}
-        J -- 是 --> K[两张表各随机抽样 100 条数据]
-        J -- 否 --> L[保留完整数据]
-        K & L --> M[整合别名 alias.txt<br>将别名高校数据合并到主校名]
-        M --> N[过滤黑名单 blacklist.txt<br>并对非正规校名发出警告]
+    %% 阶段三：按学校分组与归档判定
+    subgraph Phase3 [3. 分组与时间判定]
+        I --> J[按学校名分组<br>v1 取第 4 题、v2 取第 2 题]
+        J --> K{提交时间在最近 3 年内?}
+        K -- 是 --> L[归入活跃学校 active]
+        K -- 否 --> M[归入已归档学校 archived]
     end
 
-    %% 阶段四：多线程渲染 Markdown
-    subgraph Phase4 [4. 并发渲染与写入]
-        N --> O[初始化 FileNameMap<br>生成唯一的拼音 Slug]
-        O --> P[通过 ThreadPoolExecutor<br>并发执行 Markdown 写入]
-        P --> Q[清理文件名 -> 映射省份 -> 拼装 Hugo Front Matter]
-        Q --> R[并行写入 .md 文件到对应省份目录]
-        R --> S([流程结束])
+    %% 阶段四：渲染并写入 Hugo 页面
+    subgraph Phase4 [4. 渲染与写入]
+        L & M --> N[同校 v1 + v2 答卷合并<br>按答卷时间倒序]
+        N --> O[清洗文件名 -> 生成拼音 Slug -> 查省份]
+        O --> P[写入省份 _index.md<br>并逐校渲染正文 md]
+        P --> Q([流程结束])
     end
 
     %% 样式调整
     style A fill:#4CAF50,stroke:#333,stroke-width:2px,color:#fff
-    style S fill:#F44336,stroke:#333,stroke-width:2px,color:#fff
-    style G fill:#FF9800,stroke:#333,stroke-width:2px,color:#fff
-    style J fill:#FF9800,stroke:#333,stroke-width:2px,color:#fff
+    style Q fill:#F44336,stroke:#333,stroke-width:2px,color:#fff
+    style K fill:#FF9800,stroke:#333,stroke-width:2px,color:#fff
+    style H fill:#FF9800,stroke:#333,stroke-width:2px,color:#fff
 ```
+
+> [!NOTE]
+> `debug` 子命令走同一条渲染管线，只是数据源换成本地 mock，不做下载与归档切分。
 
 ## Debug
 
