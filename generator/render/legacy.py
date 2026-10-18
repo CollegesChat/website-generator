@@ -1,17 +1,10 @@
 from wenjuanxing_parser.models import (
     AnswerValue,
-    Questionnaire,
-    QuestionnaireResponse,
     ResponseStatus,
     SelectedOption,
 )
 
-from .common import (
-    FormattedAnswer,
-    HeaderSource,
-    _build_header,
-    render_question_groups,
-)
+from .common import FormattedAnswer
 
 
 def format_answer_legacy(value: AnswerValue) -> FormattedAnswer | None:
@@ -36,29 +29,3 @@ def format_answer_legacy(value: AnswerValue) -> FormattedAnswer | None:
             return FormattedAnswer(summary="┋".join(parts))
         return FormattedAnswer(summary=", ".join(parts))
     return FormattedAnswer(summary=str(value))
-
-
-def render_university_markdown(
-    name: str,
-    responses: list[QuestionnaireResponse],
-    questions_map: Questionnaire,
-    slug: str,
-    archived: bool,
-    uni_q_num: int,
-    enroll_by_num: dict[int, str] | None = None,
-) -> str:
-    lines = _build_header(
-        name, slug, archived, [HeaderSource(responses, enroll_by_num=enroll_by_num)]
-    )
-    lines.extend(render_university_body(responses, questions_map, uni_q_num))
-    return "".join(lines)
-
-
-def render_university_body(
-    responses: list[QuestionnaireResponse],
-    questions_map: Questionnaire,
-    uni_q_num: int,
-) -> list[str]:
-    return render_question_groups(
-        responses, questions_map, uni_q_num, format_answer_legacy
-    )

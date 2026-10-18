@@ -192,6 +192,42 @@ def render_question_groups(
     return lines
 
 
+def render_university_body(
+    responses: list[QuestionnaireResponse],
+    questions_map: Questionnaire,
+    uni_q_num: int,
+    format_fn: FormatFn,
+    *,
+    meta_q_nums: Sequence[int] = (),
+) -> list[str]:
+    skip = set(range(1, uni_q_num + 1)) | set(meta_q_nums)
+    filtered_map = {k: v for k, v in questions_map.items() if k not in skip}
+    return render_question_groups(responses, filtered_map, 0, format_fn)
+
+
+def render_university_markdown(
+    name: str,
+    responses: list[QuestionnaireResponse],
+    questions_map: Questionnaire,
+    slug: str,
+    archived: bool,
+    uni_q_num: int,
+    format_fn: FormatFn,
+    *,
+    meta_q_nums: Sequence[int] = (),
+    enroll_by_num: dict[int, str] | None = None,
+) -> str:
+    lines = _build_header(
+        name, slug, archived, [HeaderSource(responses, meta_q_nums, enroll_by_num)]
+    )
+    lines.extend(
+        render_university_body(
+            responses, questions_map, uni_q_num, format_fn, meta_q_nums=meta_q_nums
+        )
+    )
+    return "".join(lines)
+
+
 def _format_meta_value(value: AnswerValue) -> str:
     if value is None or isinstance(value, ResponseStatus):
         return ""
@@ -278,22 +314,29 @@ def render_combined_markdown(
     只有一份问卷数据时直接走对应的单版本渲染。v1_enroll 是
     「答题序号 -> 入学时间」映射（仅 v1 腾讯导入批次有），渲染器按序号伺机读取，缺失即不显示。
     """
-    from .legacy import render_university_body as render_v1_body
-    from .legacy import render_university_markdown as render_v1
+    from .legacy import format_answer_legacy
     from .new import V2_META_Q_NUMS
-    from .new import render_university_body as render_v2_body
-    from .new import render_university_markdown as render_v2
+    from .new import format_answer_new
 
     if v2_questions is None:
         if v2_responses:
             logger.warning(
                 f"{name}: 缺少 v2 问卷定义，忽略 {len(v2_responses)} 份 v2 答卷"
             )
-        return render_v1(name, v1_responses, v1_questions, slug, archived, 4, v1_enroll)
+        return render_university_markdown(
+            name, v1_responses, v1_questions, slug, archived, 4,
+            format_answer_legacy, enroll_by_num=v1_enroll,
+        )
     if not v2_responses:
-        return render_v1(name, v1_responses, v1_questions, slug, archived, 4, v1_enroll)
+        return render_university_markdown(
+            name, v1_responses, v1_questions, slug, archived, 4,
+            format_answer_legacy, enroll_by_num=v1_enroll,
+        )
     if not v1_responses:
-        return render_v2(name, v2_responses, v2_questions, slug, archived, 2)
+        return render_university_markdown(
+            name, v2_responses, v2_questions, slug, archived, 2,
+            format_answer_new, meta_q_nums=V2_META_Q_NUMS,
+        )
 
     lines = _build_header(
         name,
@@ -312,10 +355,13 @@ def render_combined_markdown(
             # shortcode 保持字面量，只把变量拼进去：
             # f-string 会折叠 {{，% 格式化又要把 % 写成 %%，两头都不划算
             '{{% tab "' + v1_label + '" %}}\n\n',
-            *render_v1_body(v1_responses, v1_questions, 4),
+            *render_university_body(v1_responses, v1_questions, 4, format_answer_legacy),
             "\n{{% /tab %}}\n\n",
             '{{% tab "' + v2_label + '" %}}\n\n',
-            *render_v2_body(v2_responses, v2_questions, 2),
+            *render_university_body(
+                v2_responses, v2_questions, 2, format_answer_new,
+                meta_q_nums=V2_META_Q_NUMS,
+            ),
             "\n{{% /tab %}}\n\n",
             "{{< /tabs >}}\n",
         ]
