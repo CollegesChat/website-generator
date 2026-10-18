@@ -91,6 +91,17 @@ def _markdown_escape(text: str) -> str:
     return MARKDOWN_ESCAPE_RE.sub(r"\\\1", text)
 
 
+def _html_escape(text: str) -> str:
+    # 仅转义会破坏 HTML 结构的字符；引号故意保留，
+    # 因为走 shortcode 源风格（Hugo 不对 shortcode 内部做引号转义）。
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _small_shortcode(text: str, cls: str | None = None) -> str:
+    open_tag = '{{< small' + (f' "{cls}"' if cls else "") + " >}}"
+    return open_tag + _html_escape(text) + "{{< /small >}}"
+
+
 def _indent_multiline(text: str, indent: str = "\t") -> str:
     """把多行文本的换行替换为换行+缩进，避免换行导致 markdown 列表项被截断。"""
     return text.replace("\n", "\n" + indent)
@@ -121,6 +132,22 @@ def render_question_groups(
         if q_num <= uni_q_num:
             continue
 
+        option_prompt: dict[str, str] = {}
+        opts = getattr(question, "options", None)
+        if opts is not None:
+            for opt in opts:
+                at = opt.additional_text
+                if not isinstance(at, bool) and getattr(at, "prompt", None):
+                    option_prompt[opt.text] = at.prompt
+
+        skipped = sum(
+            1
+            for resp in responses
+            if resp.metadata is not None
+            and (a := resp.answers.get(q_num)) is not None
+            and a.value is ResponseStatus.EMPTY
+        )
+
         groups: dict[str, list[_ResponseEntry]] = {}
         for resp in responses:
             answer = resp.answers.get(q_num)
@@ -147,18 +174,26 @@ def render_question_groups(
         else:
             lines.append(f"## Q: {question.title}\n")
         if question.prompt:
-            lines.append(f'<small>{question.prompt}</small>\n\n')
+            lines.append(_small_shortcode(question.prompt) + "\n\n")
+        if skipped:
+            lines.append(
+                _small_shortcode(f"{skipped} 位用户跳过", "response-status") + "\n\n"
+            )
         for summary_text, entries in groups.items():
             count = len(entries)
             escaped = _markdown_escape(summary_text)
+            opt_prompt = option_prompt.get(summary_text)
 
             if count == 1:
                 entry = entries[0]
                 if entry.detail:
-                    lines.append(
+                    line = (
                         f"- {_answer_label(entry.num)}: {escaped}: "
-                        f"{_indent_multiline(_markdown_escape(entry.detail))}\n"
+                        f"{_indent_multiline(_markdown_escape(entry.detail))}"
                     )
+                    if opt_prompt:
+                        line += f" {_small_shortcode(opt_prompt, 'additional-text-prompt')}"
+                    lines.append(line + "\n")
                 else:
                     lines.append(
                         f"- {_answer_label(entry.num)}: {_indent_multiline(escaped)}\n"
@@ -174,10 +209,13 @@ def render_question_groups(
                 for entry in entries:
                     if entry.detail:
                         escaped_detail = _markdown_escape(entry.detail)
-                        detail_lines.append(
+                        dl = (
                             f"  - {_answer_label(entry.num)}: "
                             f"{_indent_multiline(escaped_detail, '    ')}"
                         )
+                        if opt_prompt:
+                            dl += f" {_small_shortcode(opt_prompt, 'additional-text-prompt')}"
+                        detail_lines.append(dl)
                     else:
                         no_detail_nums.append(_answer_label(entry.num))
                 if no_detail_nums:
@@ -315,8 +353,7 @@ def render_combined_markdown(
     「答题序号 -> 入学时间」映射（仅 v1 腾讯导入批次有），渲染器按序号伺机读取，缺失即不显示。
     """
     from .legacy import format_answer_legacy
-    from .new import V2_META_Q_NUMS
-    from .new import format_answer_new
+    from .new import V2_META_Q_NUMS, format_answer_new
 
     if v2_questions is None:
         if v2_responses:
