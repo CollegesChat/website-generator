@@ -138,7 +138,7 @@ def render_question_groups(
         if isinstance(question, (RadioQuestion, CheckboxQuestion)):
             for opt in question.options:
                 at = opt.additional_text
-                if not isinstance(at, bool) and getattr(at, "prompt", None):
+                if not isinstance(at, bool) and at.prompt is not None:
                     option_prompt[opt.text] = at.prompt
 
         skipped = sum(
@@ -188,13 +188,10 @@ def render_question_groups(
             if count == 1:
                 entry = entries[0]
                 if entry.detail:
-                    line = (
+                    lines.append(
                         f"- {_answer_label(entry.num)}: {escaped}: "
-                        f"{_indent_multiline(_markdown_escape(entry.detail))}"
+                        f"{_indent_multiline(_markdown_escape(entry.detail))}\n"
                     )
-                    if opt_prompt:
-                        line += f" {_small_shortcode(opt_prompt, 'additional-text-prompt')}"
-                    lines.append(line + "\n")
                 else:
                     lines.append(
                         f"- {_answer_label(entry.num)}: {_indent_multiline(escaped)}\n"
@@ -205,18 +202,19 @@ def render_question_groups(
                 lines.append(
                     '- {{< details title="' + details_title + '" >}}\n\n'
                 )  # UPSTREAM: https://github.com/alex-shpak/hugo-book/issues/830
+                if opt_prompt:
+                    lines.append(
+                        f"  {_small_shortcode(opt_prompt, 'additional-text-prompt')}\n"
+                    )
                 no_detail_nums: list[str] = []
                 detail_lines: list[str] = []
                 for entry in entries:
                     if entry.detail:
                         escaped_detail = _markdown_escape(entry.detail)
-                        dl = (
+                        detail_lines.append(
                             f"  - {_answer_label(entry.num)}: "
                             f"{_indent_multiline(escaped_detail, '    ')}"
                         )
-                        if opt_prompt:
-                            dl += f" {_small_shortcode(opt_prompt, 'additional-text-prompt')}"
-                        detail_lines.append(dl)
                     else:
                         no_detail_nums.append(_answer_label(entry.num))
                 if no_detail_nums:
