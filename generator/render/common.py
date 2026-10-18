@@ -10,8 +10,10 @@ import zhconv
 from loguru import logger
 from wenjuanxing_parser.models import (
     AnswerValue,
+    CheckboxQuestion,
     Questionnaire,
     QuestionnaireResponse,
+    RadioQuestion,
     ResponseStatus,
     SelectedOption,
 )
@@ -133,9 +135,8 @@ def render_question_groups(
             continue
 
         option_prompt: dict[str, str] = {}
-        opts = getattr(question, "options", None)
-        if opts is not None:
-            for opt in opts:
+        if isinstance(question, (RadioQuestion, CheckboxQuestion)):
+            for opt in question.options:
                 at = opt.additional_text
                 if not isinstance(at, bool) and getattr(at, "prompt", None):
                     option_prompt[opt.text] = at.prompt
@@ -165,7 +166,7 @@ def render_question_groups(
                     _ResponseEntry(num=resp.metadata.num, detail=fmt.detail),
                 )
 
-        if not groups:
+        if not groups and not skipped:
             continue
         if "还有什么要说的吗" in question.title:
             lines.append("## 自由补充 {#自由补充-v1}\n\n")
