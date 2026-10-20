@@ -28,6 +28,14 @@ from .render import FileNameMap, render_combined_markdown, sanitize_filename
 from .render.common import _answer_time, _to_simplified, generate_markdown_path
 
 
+def _fetch_text(source: Path | str) -> tuple[str | None, int | None]:
+    """读取本地路径或远程 URL 的文本，返回 (内容, HTTP 状态)；本地路径状态为 None。"""
+    if isinstance(source, Path):
+        return source.read_text(encoding="utf-8"), None
+    r = niquests.get(source)
+    return (r.text, r.status_code) if r.status_code == 200 else (None, r.status_code)
+
+
 def apply_answer_patches(
     responses: Iterable[QuestionnaireResponse],
     patch_source: Path | str,
@@ -45,15 +53,9 @@ def apply_answer_patches(
     statuses = {"empty": ResponseStatus.EMPTY, "skipped": ResponseStatus.SKIPPED}
     raw: object = None
     try:
-        if isinstance(patch_source, Path):
-            text: str | None = patch_source.read_text(encoding="utf-8")
-        else:
-            r = niquests.get(patch_source)
-            text = r.text if r.status_code == 200 else None
-            if text is None:
-                logger.warning(
-                    f"patch 配置不可用（HTTP {r.status_code}）: {patch_source}"
-                )
+        text, status = _fetch_text(patch_source)
+        if text is None and status is not None:
+            logger.warning(f"patch 配置不可用（HTTP {status}）: {patch_source}")
         raw = parse_yaml(text) if text else None
     except Exception as e:  # noqa: BLE001
         logger.warning(f"patch 配置加载失败，已跳过: {patch_source} {e!r}")
@@ -277,17 +279,10 @@ def build_university_pages(
 def load_questionnaire(source: Path | str) -> Questionnaire | None:
     """从本地 yaml 文件或远程 URL 加载问卷定义，失败只告警并返回 None。"""
     try:
-        if isinstance(source, Path):
-            text = source.read_text(encoding="utf-8")
-        else:
-            r = niquests.get(source)
-            if r.status_code != 200:
-                logger.warning(f"问卷下载失败（HTTP {r.status_code}）: {source}")
-                return None
-            if r.text is None:
-                logger.warning(f"问卷内容为空: {source}")
-                return None
-            text = r.text
+        text, status = _fetch_text(source)
+        if text is None:
+            logger.warning(f"问卷下载失败（HTTP {status}）: {source}")
+            return None
         raw = parse_yaml(text)
         if not isinstance(raw, (list, dict)):
             logger.warning(f"问卷格式异常（顶层应为 list 或 dict）: {source}")
