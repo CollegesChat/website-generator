@@ -373,24 +373,30 @@ def render_combined_markdown(
     from .legacy import format_answer_legacy
     from .new import V2_META_Q_NUMS, format_answer_new
 
-    if v2_questions is None:
+    def _single_version(
+        responses: list[QuestionnaireResponse],
+        questions: Questionnaire,
+        uni_q_num: int,
+        fmt: FormatFn,
+        meta: Sequence[int] = (),
+        enroll: dict[int, str] | None = None,
+    ) -> str:
+        return render_university_markdown(
+            name, responses, questions, slug, archived, uni_q_num, fmt,
+            meta_q_nums=meta, enroll_by_num=enroll,
+        )
+
+    if v2_questions is None or not v2_responses:
         if v2_responses:
             logger.warning(
                 f"{name}: 缺少 v2 问卷定义，忽略 {len(v2_responses)} 份 v2 答卷"
             )
-        return render_university_markdown(
-            name, v1_responses, v1_questions, slug, archived, 4,
-            format_answer_legacy, enroll_by_num=v1_enroll,
-        )
-    if not v2_responses:
-        return render_university_markdown(
-            name, v1_responses, v1_questions, slug, archived, 4,
-            format_answer_legacy, enroll_by_num=v1_enroll,
+        return _single_version(
+            v1_responses, v1_questions, 4, format_answer_legacy, enroll=v1_enroll
         )
     if not v1_responses:
-        return render_university_markdown(
-            name, v2_responses, v2_questions, slug, archived, 2,
-            format_answer_new, meta_q_nums=V2_META_Q_NUMS,
+        return _single_version(
+            v2_responses, v2_questions, 2, format_answer_new, meta=V2_META_Q_NUMS
         )
 
     lines = _build_header(
