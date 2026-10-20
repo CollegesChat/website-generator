@@ -1,3 +1,5 @@
+"""渲染层：问卷模型 -> Hugo Markdown（转义 / 分组 / 页头 / 单版本与合并渲染）。"""
+
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -34,7 +36,8 @@ def _to_simplified(text: str) -> str:
     return zhconv.convert(text, "zh-cn")
 
 
-_EPOCH = datetime.min.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+_TZ = ZoneInfo("Asia/Shanghai")
+_EPOCH = datetime.min.replace(tzinfo=_TZ)
 
 
 def _answer_time(resp: QuestionnaireResponse) -> datetime:
@@ -43,7 +46,7 @@ def _answer_time(resp: QuestionnaireResponse) -> datetime:
         return _EPOCH
     answer_date = resp.metadata.answer_date
     if answer_date.tzinfo is None:
-        return answer_date.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+        return answer_date.replace(tzinfo=_TZ)
     return answer_date
 
 
@@ -76,20 +79,16 @@ type FormatFn = Callable[[AnswerValue], FormattedAnswer | list[FormattedAnswer] 
 
 
 def sanitize_filename(filename: str) -> str:
+    """清洗非法字符，并按显示宽度截断：ASCII 记 1、其余记 2，上限 32。"""
     cleaned = re.sub(r"[\\/]", "_", filename)
     cleaned = re.sub(r'[:*?"<>|\0\r\n\t]', "", cleaned)
 
-    max_weight = 32
-    current_weight = 0
-    truncated_index = len(cleaned)
+    width = 0
     for i, char in enumerate(cleaned):
-        weight = 2 if ord(char) > 127 else 1
-        if current_weight + weight > max_weight:
-            truncated_index = i
-            break
-        current_weight += weight
-
-    return cleaned[:truncated_index]
+        width += 2 if ord(char) > 127 else 1
+        if width > 32:
+            return cleaned[:i]
+    return cleaned
 
 
 def _markdown_escape(text: str) -> str:
