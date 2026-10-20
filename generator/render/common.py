@@ -24,6 +24,8 @@ from ..config import (
     MARKDOWN_ESCAPE_RE,
     NICKNAME_NUM,
     SITE_DIR,
+    V1_UNI_Q_NUM,
+    V2_UNI_Q_NUM,
 )
 
 
@@ -392,11 +394,11 @@ def render_combined_markdown(
                 f"{name}: 缺少 v2 问卷定义，忽略 {len(v2_responses)} 份 v2 答卷"
             )
         return _single_version(
-            v1_responses, v1_questions, 4, format_answer_legacy, enroll=v1_enroll
+            v1_responses, v1_questions, V1_UNI_Q_NUM, format_answer_legacy, enroll=v1_enroll
         )
     if not v1_responses:
         return _single_version(
-            v2_responses, v2_questions, 2, format_answer_new, meta=V2_META_Q_NUMS
+            v2_responses, v2_questions, V2_UNI_Q_NUM, format_answer_new, meta=V2_META_Q_NUMS
         )
 
     lines = _build_header(
@@ -416,11 +418,11 @@ def render_combined_markdown(
             # shortcode 保持字面量，只把变量拼进去：
             # f-string 会折叠 {{，% 格式化又要把 % 写成 %%，两头都不划算
             '{{% tab "' + v1_label + '" %}}\n\n',
-            *render_university_body(v1_responses, v1_questions, 4, format_answer_legacy),
+            *render_university_body(v1_responses, v1_questions, V1_UNI_Q_NUM, format_answer_legacy),
             "\n{{% /tab %}}\n\n",
             '{{% tab "' + v2_label + '" %}}\n\n',
             *render_university_body(
-                v2_responses, v2_questions, 2, format_answer_new,
+                v2_responses, v2_questions, V2_UNI_Q_NUM, format_answer_new,
                 meta_q_nums=V2_META_Q_NUMS,
             ),
             "\n{{% /tab %}}\n\n",

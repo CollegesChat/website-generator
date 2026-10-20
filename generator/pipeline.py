@@ -21,14 +21,11 @@ from wenjuanxing_parser.models import (
 )
 from yaml12 import parse_yaml
 
-from .config import ARCHIVE_YEARS, NAME_PREPROCESS
+from .config import ARCHIVE_YEARS, NAME_PREPROCESS, V1_UNI_Q_NUM, V2_UNI_Q_NUM
 from .parser import qnum_extractor
 from .province import find_province
 from .render import FileNameMap, render_combined_markdown, sanitize_filename
 from .render.common import _answer_time, _to_simplified, generate_markdown_path
-
-V1_UNI_Q_NUM = 4
-V2_UNI_Q_NUM = 2
 
 
 def apply_answer_patches(

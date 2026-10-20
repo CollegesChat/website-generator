@@ -17,9 +17,9 @@ from wenjuanxing_parser import QuestionnaireData
 from wenjuanxing_parser.models import Questionnaire, QuestionnaireResponse
 
 from ._mock import generate_mock_v2_data
+from .config import V2_UNI_Q_NUM
 from .parser import legacy_meta_extractor, new_meta_extractor, qnum_extractor
 from .pipeline import (
-    V2_UNI_Q_NUM,
     apply_answer_patches,
     build_university_pages,
     collect_universities,
