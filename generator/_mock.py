@@ -129,17 +129,11 @@ def _make_metadata(num: int) -> BasicData:
     return BasicData(answer_date=_random_date(), num=num, **MISSING_BASIC_DATA_KWARGS)
 
 
-def _has_additional(option) -> bool:
-    return bool(option.additional_text)
-
-
 def _random_additional(option) -> str | None:
-    if not _has_additional(option):
+    if not option.additional_text:
         return None
     if random.random() < 0.4:
         return None
-    if isinstance(option.additional_text, bool):
-        return random.choice(SHORT_TEXTS + LONG_TEXTS)
     return random.choice(SHORT_TEXTS + LONG_TEXTS)
 
 
