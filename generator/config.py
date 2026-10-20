@@ -21,7 +21,6 @@ IMPORTED_NUM_FROM = 100_000_000
 # 分组（collect_universities）与正文渲染跳过（render_university_body）共用。
 V1_UNI_Q_NUM = 4
 V2_UNI_Q_NUM = 2
-ROOT = Path("required")
 SITE_DIR = Path(os.getenv("SITE_DIR", r"/mnt/data/Project/questionnaire-report-theme"))
 
 NAME_PREPROCESS = re.compile(r"[\(\)（）【】#]")
