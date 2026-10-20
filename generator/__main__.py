@@ -99,7 +99,7 @@ else:
 
     build_university_pages(
         v1_survey_data,
-        v2_survey_data or [],
+        v2_survey_data,
         v1_questionnaire,
         v2_questionnaire,
         province_mapping,

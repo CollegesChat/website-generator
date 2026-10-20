@@ -143,9 +143,7 @@ def collect_universities(
     universities: defaultdict[str, list] = defaultdict(list)
     universities_archived: defaultdict[str, list] = defaultdict(list)
     for resp in survey_data:
-        uni_answer = resp.answers.get(uni_q_num)
-        if uni_answer is None:
-            continue
+        uni_answer = resp.answers[uni_q_num]
         name = NAME_PREPROCESS.sub("", str(uni_answer.value)).strip()
         name = _to_simplified(name)
         if not name:

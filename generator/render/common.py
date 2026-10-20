@@ -150,9 +150,9 @@ def _collect_question_groups(
     groups: dict[str, list[_ResponseEntry]] = {}
     skipped = 0
     for resp in responses:
-        answer = resp.answers.get(q_num)
-        if answer is None or resp.metadata is None:
+        if resp.metadata is None:
             continue
+        answer = resp.answers[q_num]
         if answer.value is ResponseStatus.EMPTY:
             skipped += 1
             continue
@@ -336,11 +336,9 @@ def _build_header(
             # 源列是纯年份（如 2021年），补「入学」才不被误读成答卷日期的一部分
             meta_parts.append(f"{enroll_by_num[resp.metadata.num]}入学")
         for q_num in meta_q_nums:
-            answer = resp.answers.get(q_num)
-            if answer is not None:
-                text = _format_meta_value(answer.value)
-                if text:
-                    meta_parts.append(text)
+            text = _format_meta_value(resp.answers[q_num].value)
+            if text:
+                meta_parts.append(text)
         nickname = _format_meta_value(resp.answers[NICKNAME_NUM].value)
         meta_str = ", ".join(meta_parts)
         # v1 的昵称位（Q1 单选）存的是选项序号，不是真实昵称
