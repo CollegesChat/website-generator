@@ -106,6 +106,10 @@ def _small_shortcode(text: str, cls: str | None = None) -> str:
     return open_tag + _html_escape(text) + "{{< /small >}}"
 
 
+# details 内列表续行缩进；顶层列表用 _indent_multiline 默认的 \t
+_LIST_INDENT = "    "
+
+
 def _indent_multiline(text: str, indent: str = "\t") -> str:
     """把多行文本的换行替换为换行+缩进，避免换行导致 markdown 列表项被截断。"""
     return text.replace("\n", "\n" + indent)
@@ -202,7 +206,7 @@ def _render_details(
             escaped_detail = _markdown_escape(entry.detail)
             detail_lines.append(
                 f"  - {_answer_label(entry.num)}: "
-                f"{_indent_multiline(escaped_detail, '    ')}"
+                f"{_indent_multiline(escaped_detail, _LIST_INDENT)}"
             )
         else:
             no_detail_nums.append(_answer_label(entry.num))
@@ -260,6 +264,7 @@ def render_university_body(
 ) -> list[str]:
     skip = set(range(1, uni_q_num + 1)) | set(meta_q_nums)
     filtered_map = {k: v for k, v in questions_map.items() if k not in skip}
+    # questions_map 已预过滤（跳过逻辑在上面的 skip 集合）
     return render_question_groups(responses, filtered_map, format_fn)
 
 
