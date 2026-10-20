@@ -153,13 +153,9 @@ def collect_universities(
         name = _to_simplified(name)
         if not name:
             continue
-        if resp.metadata:
-            answer_date = resp.metadata.answer_date
-            if answer_date.tzinfo is None:
-                answer_date = answer_date.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
-            if answer_date < archive_time:
-                universities_archived[name].append(resp)
-                continue
+        if resp.metadata and _answer_time(resp) < archive_time:
+            universities_archived[name].append(resp)
+            continue
         universities[name].append(resp)
     for entries in universities.values():
         entries.reverse()
