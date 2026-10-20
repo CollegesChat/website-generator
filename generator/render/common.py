@@ -3,13 +3,13 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import cast
 from zoneinfo import ZoneInfo
 
 import zhconv
 from loguru import logger
 from wenjuanxing_parser.models import (
     AnswerValue,
+    AnyQuestion,
     CheckboxQuestion,
     Questionnaire,
     QuestionnaireResponse,
@@ -123,6 +123,97 @@ def generate_markdown_path(province: str, filename: str, archived: bool) -> Path
     return base / "universities" / province / f"{filename}.md"
 
 
+def _option_prompts(question: AnyQuestion) -> dict[str, str]:
+    """选项附加文本提示语，按选项文本索引（仅 radio/checkbox 有）。"""
+    prompts: dict[str, str] = {}
+    if isinstance(question, (RadioQuestion, CheckboxQuestion)):
+        for opt in question.options:
+            at = opt.additional_text
+            if not isinstance(at, bool) and at.prompt is not None:
+                prompts[opt.text] = at.prompt
+    return prompts
+
+
+def _collect_question_groups(
+    responses: list[QuestionnaireResponse],
+    q_num: int,
+    format_fn: FormatFn,
+) -> tuple[dict[str, list[_ResponseEntry]], int]:
+    """按答案文本分组收集答卷，顺带统计整题作废条数。
+
+    依赖 format_fn 对 ResponseStatus 一律返回 None：EMPTY 走 skipped 计数，
+    其余状态自然落不到任何组，与原两遍遍历等价。
+    """
+    groups: dict[str, list[_ResponseEntry]] = {}
+    skipped = 0
+    for resp in responses:
+        answer = resp.answers.get(q_num)
+        if answer is None or resp.metadata is None:
+            continue
+        if answer.value is ResponseStatus.EMPTY:
+            skipped += 1
+            continue
+        formatted = format_fn(answer.value)
+        if formatted is None:
+            continue
+        formatted_list = formatted if isinstance(formatted, list) else [formatted]
+        for fmt in formatted_list:
+            groups.setdefault(fmt.summary, []).append(
+                _ResponseEntry(num=resp.metadata.num, detail=fmt.detail),
+            )
+    return groups, skipped
+
+
+def _free_supplement_anchor(title: str) -> str | None:
+    """自由补充题锚点：v1 标题含「还有什么要说的吗」，v2 标题即「自由补充」。"""
+    if "还有什么要说的吗" in title:
+        return "自由补充 {#自由补充-v1}"
+    if "自由补充" in title:
+        return "自由补充 {#自由补充-v2}"
+    return None
+
+
+def _render_single(entry: _ResponseEntry, summary: str) -> list[str]:
+    escaped = _markdown_escape(summary)
+    if entry.detail:
+        detail = _indent_multiline(_markdown_escape(entry.detail))
+        return [f"- {_answer_label(entry.num)}: {escaped}: {detail}\n"]
+    return [f"- {_answer_label(entry.num)}: {_indent_multiline(escaped)}\n"]
+
+
+def _render_details(
+    summary: str, entries: list[_ResponseEntry], opt_prompt: str | None
+) -> list[str]:
+    count = len(entries)
+    escaped = _markdown_escape(summary)
+    title_escaped = re.sub(r'["\r\n]', "", escaped)
+    lines = [
+        # UPSTREAM: https://github.com/alex-shpak/hugo-book/issues/830
+        '- {{< details title="' + f"{title_escaped} x {count}" + '" >}}\n\n'
+    ]
+    if opt_prompt:
+        lines.append(f"  {_small_shortcode(opt_prompt, 'additional-text-prompt')}\n")
+    no_detail_nums: list[str] = []
+    detail_lines: list[str] = []
+    for entry in entries:
+        if entry.detail:
+            escaped_detail = _markdown_escape(entry.detail)
+            detail_lines.append(
+                f"  - {_answer_label(entry.num)}: "
+                f"{_indent_multiline(escaped_detail, '    ')}"
+            )
+        else:
+            no_detail_nums.append(_answer_label(entry.num))
+    if no_detail_nums:
+        lines.append("  " + " ".join(no_detail_nums) + "\n")
+    if no_detail_nums and detail_lines:
+        lines.append("\n  ---\n")
+    for dl in detail_lines:
+        lines.append(dl + "\n")
+    lines.append("\n  {{< /details >}}\n")
+    return lines
+
+
 def render_question_groups(
     responses: list[QuestionnaireResponse],
     questions_map: Questionnaire,
@@ -130,46 +221,13 @@ def render_question_groups(
 ) -> list[str]:
     lines: list[str] = []
     for q_num, question in sorted(questions_map.items()):
-        option_prompt: dict[str, str] = {}
-        if isinstance(question, (RadioQuestion, CheckboxQuestion)):
-            for opt in question.options:
-                at = opt.additional_text
-                if not isinstance(at, bool) and at.prompt is not None:
-                    option_prompt[opt.text] = at.prompt
-
-        skipped = sum(
-            1
-            for resp in responses
-            if resp.metadata is not None
-            and (a := resp.answers.get(q_num)) is not None
-            and a.value is ResponseStatus.EMPTY
-        )
-
-        groups: dict[str, list[_ResponseEntry]] = {}
-        for resp in responses:
-            answer = resp.answers.get(q_num)
-            if answer is None or resp.metadata is None:
-                continue
-            formatted = format_fn(answer.value)
-            if formatted is None:
-                continue
-            if isinstance(formatted, list):
-                formatted_list = cast("list[FormattedAnswer]", formatted)
-            else:
-                formatted_list = [formatted]
-            for fmt in formatted_list:
-                groups.setdefault(fmt.summary, []).append(
-                    _ResponseEntry(num=resp.metadata.num, detail=fmt.detail),
-                )
-
+        option_prompt = _option_prompts(question)
+        groups, skipped = _collect_question_groups(responses, q_num, format_fn)
         if not groups and not skipped:
             continue
-        if "还有什么要说的吗" in question.title:
-            lines.append("## 自由补充 {#自由补充-v1}\n\n")
-        elif "自由补充" in question.title:
-            lines.append("## 自由补充 {#自由补充-v2}\n\n")
-        else:
-            lines.append(f"## Q: {question.title}\n")
+
+        anchor = _free_supplement_anchor(question.title)
+        lines.append(f"## {anchor}\n\n" if anchor else f"## Q: {question.title}\n")
         if question.prompt:
             lines.append(_small_shortcode(question.prompt) + "\n\n")
         if skipped:
@@ -177,49 +235,14 @@ def render_question_groups(
                 _small_shortcode(f"{skipped} 位用户跳过", "response-status") + "\n\n"
             )
         for summary_text, entries in groups.items():
-            count = len(entries)
-            escaped = _markdown_escape(summary_text)
-            opt_prompt = option_prompt.get(summary_text)
-
-            if count == 1:
-                entry = entries[0]
-                if entry.detail:
-                    lines.append(
-                        f"- {_answer_label(entry.num)}: {escaped}: "
-                        f"{_indent_multiline(_markdown_escape(entry.detail))}\n"
-                    )
-                else:
-                    lines.append(
-                        f"- {_answer_label(entry.num)}: {_indent_multiline(escaped)}\n"
-                    )
+            if len(entries) == 1:
+                lines.extend(_render_single(entries[0], summary_text))
             else:
-                title_escaped = re.sub(r'["\r\n]', "", escaped)
-                details_title = f"{title_escaped} x {count}"
-                lines.append(
-                    '- {{< details title="' + details_title + '" >}}\n\n'
-                )  # UPSTREAM: https://github.com/alex-shpak/hugo-book/issues/830
-                if opt_prompt:
-                    lines.append(
-                        f"  {_small_shortcode(opt_prompt, 'additional-text-prompt')}\n"
+                lines.extend(
+                    _render_details(
+                        summary_text, entries, option_prompt.get(summary_text)
                     )
-                no_detail_nums: list[str] = []
-                detail_lines: list[str] = []
-                for entry in entries:
-                    if entry.detail:
-                        escaped_detail = _markdown_escape(entry.detail)
-                        detail_lines.append(
-                            f"  - {_answer_label(entry.num)}: "
-                            f"{_indent_multiline(escaped_detail, '    ')}"
-                        )
-                    else:
-                        no_detail_nums.append(_answer_label(entry.num))
-                if no_detail_nums:
-                    lines.append("  " + " ".join(no_detail_nums) + "\n")
-                if no_detail_nums and detail_lines:
-                    lines.append("\n  ---\n")
-                for dl in detail_lines:
-                    lines.append(dl + "\n")
-                lines.append("\n  {{< /details >}}\n")
+                )
         lines.append("\n")
 
     return lines
