@@ -31,30 +31,22 @@ def download_files(names: list[str], base_url: str, root: Path) -> None:
     """下载缺失的文件到 root 目录"""
     root.mkdir(parents=True, exist_ok=True)
     for name in names:
-        local_file = Path(
-            root / name if not name.startswith("http") else name.split("/")[-1]
-        )
-        if not local_file.exists():
-            if not name.startswith("http"):
-                url = base_url + name
-            else:
-                url = name
-            logger.info(f"Downloading {local_file} from {url}...")
-            r = niquests.get(url)
-            if r.status_code == 200:
-                local_file.write_bytes(cast(bytes, r.content))
-                logger.info(f"Saved {name}")
-            else:
-                logger.error(f"Failed to download {name}, status code: {r.status_code}")
-        else:
+        is_remote = name.startswith("http")
+        url = name if is_remote else base_url + name
+        local_file = root / (name.split("/")[-1] if is_remote else name)
+        if local_file.exists():
             logger.warning(f"Skipped: {local_file.relative_to(root)} already exists")
+            continue
+        logger.info(f"Downloading {local_file} from {url}...")
+        r = niquests.get(url)
+        if r.status_code == 200:
+            local_file.write_bytes(cast(bytes, r.content))
+            logger.info(f"Saved {name}")
+        else:
+            logger.error(f"Failed to download {name}, status code: {r.status_code}")
 
 
-if "debug" in sys.argv:
-    from ._debug import run_debug
-
-    run_debug()
-else:
+def run_build() -> None:
     logger.info("开始检查并同步远程资源文件...")
     download_files(
         REQUIRED_DOCS, DOC_URL, SITE_DIR / "content" / "docs" / "choose-a-college"
@@ -105,3 +97,11 @@ else:
         province_mapping,
         v1_enroll=v1_enroll,
     )
+
+
+if "debug" in sys.argv:
+    from ._debug import run_debug
+
+    run_debug()
+else:
+    run_build()
