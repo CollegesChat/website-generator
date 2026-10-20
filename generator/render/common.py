@@ -126,14 +126,10 @@ def generate_markdown_path(province: str, filename: str, archived: bool) -> Path
 def render_question_groups(
     responses: list[QuestionnaireResponse],
     questions_map: Questionnaire,
-    uni_q_num: int,
     format_fn: FormatFn,
 ) -> list[str]:
     lines: list[str] = []
     for q_num, question in sorted(questions_map.items()):
-        if q_num <= uni_q_num:
-            continue
-
         option_prompt: dict[str, str] = {}
         if isinstance(question, (RadioQuestion, CheckboxQuestion)):
             for opt in question.options:
@@ -239,7 +235,7 @@ def render_university_body(
 ) -> list[str]:
     skip = set(range(1, uni_q_num + 1)) | set(meta_q_nums)
     filtered_map = {k: v for k, v in questions_map.items() if k not in skip}
-    return render_question_groups(responses, filtered_map, 0, format_fn)
+    return render_question_groups(responses, filtered_map, format_fn)
 
 
 def render_university_markdown(
