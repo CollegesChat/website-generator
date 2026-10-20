@@ -346,13 +346,8 @@ def _build_header(
         if nickname != ANONYMOUS and is_v2_version:
             meta_str += ('{{< nickname ",' + _markdown_escape(nickname) + '" >}}')
         num_label = _answer_label(resp.metadata.num)
-        if meta_str:
-            lines.append(
-                f"- {num_label} ({resp.metadata.answer_date:%Y年%m月}): "
-                f"{meta_str}\n"
-            )
-        else:
-            lines.append(f"- {num_label} ({resp.metadata.answer_date:%Y年%m月})\n")
+        suffix = f": {meta_str}" if meta_str else ""
+        lines.append(f"- {num_label} ({resp.metadata.answer_date:%Y年%m月}){suffix}\n")
     lines.append("\n{{% /details %}}\n\n")
     return lines
 
