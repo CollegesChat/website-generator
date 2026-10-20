@@ -24,6 +24,7 @@ from ..config import (
     MARKDOWN_ESCAPE_RE,
     NICKNAME_NUM,
     SITE_DIR,
+    V1_NICKNAME_CHOICES,
     V1_UNI_Q_NUM,
     V2_UNI_Q_NUM,
 )
@@ -342,8 +343,9 @@ def _build_header(
                     meta_parts.append(text)
         nickname = _format_meta_value(resp.answers[NICKNAME_NUM].value)
         meta_str = ", ".join(meta_parts)
-        is_v2_version = nickname not in ('1', '2')
-        if nickname != ANONYMOUS and is_v2_version:
+        # v1 的昵称位（Q1 单选）存的是选项序号，不是真实昵称
+        has_real_nickname = nickname not in V1_NICKNAME_CHOICES
+        if nickname != ANONYMOUS and has_real_nickname:
             meta_str += ('{{< nickname ",' + _markdown_escape(nickname) + '" >}}')
         num_label = _answer_label(resp.metadata.num)
         suffix = f": {meta_str}" if meta_str else ""

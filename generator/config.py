@@ -50,6 +50,8 @@ REQUIRED_DOCS = [
 ]
 ANONYMOUS = '匿名受访者'
 NICKNAME_NUM = 1
+# v1 的昵称位（Q1 单选）存的是选项序号，不是真实昵称
+V1_NICKNAME_CHOICES = ("1", "2")
 (SITE_DIR / "content" / "docs" / "universities").mkdir(parents=True, exist_ok=True)
 (SITE_DIR / "content" / "docs" / "archived" / "universities").mkdir(
     parents=True, exist_ok=True
