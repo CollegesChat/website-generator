@@ -137,13 +137,17 @@ def apply_answer_patches(
 def collect_universities(
     survey_data: Iterable[QuestionnaireResponse],
     uni_q_num: int,
-) -> tuple[dict[str, list], dict[str, list]]:
+) -> tuple[
+    dict[str, list[QuestionnaireResponse]], dict[str, list[QuestionnaireResponse]]
+]:
     """遍历问卷数据，按学校名分组，最近 ARCHIVE_YEARS 年内为 active，更早为 archived"""
     archive_time = datetime.now(ZoneInfo("Asia/Shanghai")) - timedelta(
         days=ARCHIVE_YEARS * 365
     )
-    universities: defaultdict[str, list] = defaultdict(list)
-    universities_archived: defaultdict[str, list] = defaultdict(list)
+    universities: defaultdict[str, list[QuestionnaireResponse]] = defaultdict(list)
+    universities_archived: defaultdict[str, list[QuestionnaireResponse]] = (
+        defaultdict(list)
+    )
     for resp in survey_data:
         uni_answer = resp.answers[uni_q_num]
         name = NAME_PREPROCESS.sub("", str(uni_answer.value)).strip()
@@ -154,10 +158,9 @@ def collect_universities(
             universities_archived[name].append(resp)
             continue
         universities[name].append(resp)
-    for entries in universities.values():
-        entries.reverse()
-    for entries in universities_archived.values():
-        entries.reverse()
+    for group in (universities, universities_archived):
+        for entries in group.values():
+            entries.reverse()
     return dict(universities), dict(universities_archived)
 
 
